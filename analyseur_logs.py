@@ -4,96 +4,76 @@ analyseur_logs.py
 Script d'analyse automatique de logs Spring Boot (format JSON/ECS),
 avec appel conditionnel à Ollama (LLM local) uniquement sur les erreurs.
 
-Principe :
-  1. On lit le fichier de log ligne par ligne (chaque ligne = un objet JSON)
-  2. On regarde le niveau (INFO / WARN / ERROR) de chaque ligne
-  3. Selon le niveau, on décide de l'action :
-       - INFO  -> on ignore, rien à faire
-       - WARN  -> on note dans la console, pas d'appel au LLM
-       - ERROR -> on appelle Ollama pour obtenir une analyse
-  4. Chaque événement traité est horodaté :
-       - en UTC (standard international, présent dans le log d'origine,
-         reconnaissable au "Z" final -> Zulu time = UTC)
-       - en heure locale (Indian/Antananarivo, UTC+3) pour une lecture
-         plus intuitive au quotidien
-     Les deux sont affichés en parallèle, rien n'est perdu.
+Changement important par rapport aux versions précédentes :
+  On n'utilise plus la commande terminal "ollama run ..." (via subprocess),
+  car elle produit des codes de contrôle ANSI illisibles une fois capturés
+  par un script. On utilise à la place l'API HTTP locale d'Ollama
+  (http://localhost:11434), qui renvoie une réponse JSON propre,
+  sans aucun artefact d'affichage.
+
+  Nécessite le paquet "requests" :
+      pip install requests --break-system-packages
 """
 
 import json
-import subprocess
+import re
+import requests
 from pathlib import Path
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 
-# Nom exact du modèle installé localement.
-# Vérifie le tien avec : ollama list
 NOM_MODELE = "llama3.2:3b"
-
-# Fuseau horaire local (Madagascar = UTC+3, pas de changement d'heure saisonnier)
 FUSEAU_LOCAL = ZoneInfo("Indian/Antananarivo")
-
-# Fichier où on garde une trace de toutes les analyses effectuées.
 FICHIER_RAPPORT = "logs/rapport_analyses.log"
-
-# Temps maximum accordé à Ollama pour répondre (en secondes).
-# Augmenté à 300s (5 min) car le premier chargement du modèle en mémoire
-# peut être lent selon les ressources de la machine.
 TIMEOUT_OLLAMA = 300
 
+# URL de l'API locale d'Ollama (démarrée automatiquement par "ollama serve"
+# ou par le service système si Ollama est installé normalement).
+URL_OLLAMA = "http://localhost:11434/api/generate"
+
 
 # ----------------------------------------------------------------------
-# Fonction utilitaire : convertit un timestamp ISO (UTC, avec "Z")
-# en un texte lisible affichant à la fois UTC et heure locale.
+# Nettoyage du texte renvoyé par le modèle : enlève le formatage Markdown
+# (les ** de gras, les # de titres...) pour un texte brut plus lisible
+# dans un fichier de log.
+# ----------------------------------------------------------------------
+def nettoyer_markdown(texte: str) -> str:
+    texte = re.sub(r"\*\*(.+?)\*\*", r"\1", texte)  # **gras** -> gras
+    texte = re.sub(r"^#+\s*", "", texte, flags=re.MULTILINE)  # # Titre -> Titre
+    return texte.strip()
+
+
+# ----------------------------------------------------------------------
+# Conversion de timestamp (inchangé par rapport à la version précédente)
 # ----------------------------------------------------------------------
 def formater_timestamp(timestamp_iso: str) -> str:
-    """
-    Prend un timestamp du type '2026-07-15T08:10:47.705720417Z'
-    (le 'Z' signifie UTC, aussi appelé 'Zulu time') et retourne une
-    chaîne affichant l'heure UTC ET l'heure locale de Madagascar.
-    """
     if timestamp_iso == "inconnu":
         return "inconnu"
-
     try:
-        # Python ne comprend pas nativement le "Z" -> on le remplace
-        # par "+00:00", équivalent explicite pour UTC.
         ts_propre = timestamp_iso.replace("Z", "+00:00")
-
-        # Les timestamps Java ont parfois des nanosecondes (9 chiffres),
-        # alors que Python n'accepte que des microsecondes (6 chiffres).
-        # On tronque si besoin pour éviter une erreur de parsing.
         if "." in ts_propre:
             partie_date, reste = ts_propre.split(".")
             decimales, offset = reste[:6], reste[6:]
-            # on retrouve le "+00:00" original s'il a été coupé
             if not offset.startswith(("+", "-")):
                 offset = reste[9:] if len(reste) > 9 else "+00:00"
             ts_propre = f"{partie_date}.{decimales}{offset}"
-
         dt_utc = datetime.fromisoformat(ts_propre)
         dt_local = dt_utc.astimezone(FUSEAU_LOCAL)
-
         return (
             f"{dt_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC "
             f"(= {dt_local.strftime('%Y-%m-%d %H:%M:%S')} heure Madagascar)"
         )
     except (ValueError, IndexError):
-        # Si le format est inattendu, on retourne la valeur brute
-        # plutôt que de faire planter tout le script pour un détail
-        # d'affichage.
         return timestamp_iso
 
 
-# ----------------------------------------------------------------------
-# 1. Fonction qui décide de la gravité d'une ligne de log
-# ----------------------------------------------------------------------
 def niveau_de_gravite(entry: dict) -> str:
     return entry.get("log", {}).get("level", "")
 
 
 # ----------------------------------------------------------------------
-# 2. Fonction qui construit le prompt et appelle Ollama
+# Appel à Ollama via son API HTTP locale (au lieu du terminal)
 # ----------------------------------------------------------------------
 def analyser_avec_ollama(entry: dict) -> str:
     erreur = entry.get("error", {})
@@ -104,6 +84,8 @@ def analyser_avec_ollama(entry: dict) -> str:
 IMPORTANT : appuie chaque affirmation sur une citation exacte d'un champ
 du JSON fourni. Si une information n'est pas déductible du log, dis
 "je ne peux pas le confirmer avec ce log seul" plutôt que de deviner.
+N'utilise PAS de formatage Markdown (pas de **, pas de #) : réponds en
+texte brut simple.
 
 1. Que s'est-il passé exactement ?
 2. Quelle ligne de code est responsable ? (cite error.stack_trace)
@@ -120,27 +102,33 @@ Message d'erreur : {erreur.get("message", "inconnu")}
 """
 
     try:
-        resultat = subprocess.run(
-            ["ollama", "run", NOM_MODELE, prompt],
-            capture_output=True,
-            text=True,
+        reponse = requests.post(
+            URL_OLLAMA,
+            json={
+                "model": NOM_MODELE,
+                "prompt": prompt,
+                "stream": False,  # on veut la réponse complète d'un coup,
+                                  # pas un flux token par token
+            },
             timeout=TIMEOUT_OLLAMA,
         )
-    except subprocess.TimeoutExpired:
+        reponse.raise_for_status()
+        texte_brut = reponse.json().get("response", "")
+        return nettoyer_markdown(texte_brut)
+
+    except requests.exceptions.ConnectionError:
+        return (
+            "[Impossible de joindre Ollama sur http://localhost:11434 — "
+            "vérifie qu'il tourne avec : ollama serve]"
+        )
+    except requests.exceptions.Timeout:
         return f"[Timeout après {TIMEOUT_OLLAMA}s — Ollama n'a pas répondu à temps]"
-
-    if resultat.returncode != 0:
-        return f"[Erreur lors de l'appel à Ollama] {resultat.stderr}"
-
-    return resultat.stdout
+    except requests.exceptions.RequestException as e:
+        return f"[Erreur lors de l'appel à Ollama] {e}"
 
 
-# ----------------------------------------------------------------------
-# 3. Fonction qui écrit une trace horodatée dans le fichier de rapport
-# ----------------------------------------------------------------------
 def enregistrer_rapport(timestamp_original: str, niveau: str, message: str, analyse: str = ""):
     timestamp_analyse = datetime.now(timezone.utc).isoformat()
-
     ligne_rapport = {
         "timestamp_evenement_utc": timestamp_original,
         "timestamp_evenement_lisible": formater_timestamp(timestamp_original),
@@ -149,18 +137,13 @@ def enregistrer_rapport(timestamp_original: str, niveau: str, message: str, anal
         "message": message,
         "analyse_llm": analyse,
     }
-
     Path("logs").mkdir(exist_ok=True)
     with open(FICHIER_RAPPORT, "a", encoding="utf-8") as f:
         f.write(json.dumps(ligne_rapport, ensure_ascii=False) + "\n")
 
 
-# ----------------------------------------------------------------------
-# 4. Fonction principale : lit le fichier et applique la logique
-# ----------------------------------------------------------------------
 def analyser_fichier_log(chemin_fichier: str):
     chemin = Path(chemin_fichier)
-
     if not chemin.exists():
         print(f"❌ Fichier introuvable : {chemin_fichier}")
         return
@@ -170,7 +153,6 @@ def analyser_fichier_log(chemin_fichier: str):
             ligne = ligne.strip()
             if not ligne:
                 continue
-
             try:
                 entry = json.loads(ligne)
             except json.JSONDecodeError:
@@ -192,10 +174,9 @@ def analyser_fichier_log(chemin_fichier: str):
                 print(f"🔴 [{timestamp_affiche}] [ligne {numero_ligne}] ERROR détectée, analyse en cours...")
                 print(f"   Message brut : {message}\n")
 
-                heure_debut_analyse = datetime.now(timezone.utc)
+                heure_debut = datetime.now(timezone.utc)
                 analyse = analyser_avec_ollama(entry)
-                heure_fin_analyse = datetime.now(timezone.utc)
-                duree = (heure_fin_analyse - heure_debut_analyse).total_seconds()
+                duree = (datetime.now(timezone.utc) - heure_debut).total_seconds()
 
                 print(f"---- Analyse Ollama (durée : {duree:.1f}s) ----")
                 print(analyse)
@@ -204,9 +185,6 @@ def analyser_fichier_log(chemin_fichier: str):
                 enregistrer_rapport(timestamp_original, "ERROR", message, analyse)
 
 
-# ----------------------------------------------------------------------
-# Point d'entrée du script
-# ----------------------------------------------------------------------
 if __name__ == "__main__":
     CHEMIN_LOG = "logs/petclinic.log"
 
