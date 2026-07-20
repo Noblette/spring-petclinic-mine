@@ -4,15 +4,17 @@ analyseur_logs.py
 Script d'analyse automatique de logs Spring Boot (format JSON/ECS),
 avec appel conditionnel à Ollama (LLM local) uniquement sur les erreurs.
 
-Changement important par rapport aux versions précédentes :
-  On n'utilise plus la commande terminal "ollama run ..." (via subprocess),
-  car elle produit des codes de contrôle ANSI illisibles une fois capturés
-  par un script. On utilise à la place l'API HTTP locale d'Ollama
-  (http://localhost:11434), qui renvoie une réponse JSON propre,
-  sans aucun artefact d'affichage.
+Fonctionne sur N'IMPORTE QUELLE application Spring Boot, à condition
+qu'elle ait activé le format de log structuré ECS
+(logging.structured.format.file=ecs dans application.properties).
+Rien dans ce script n'est spécifique à PetClinic : il ne lit que des
+champs génériques du standard ECS (log.level, message, error.*).
 
-  Nécessite le paquet "requests" :
-      pip install requests --break-system-packages
+Utilise l'API HTTP locale d'Ollama (http://localhost:11434) plutôt que
+la commande terminal, pour éviter les artefacts d'affichage (codes ANSI).
+
+Nécessite le paquet "requests" :
+    pip install requests --break-system-packages
 """
 
 import json
@@ -27,26 +29,15 @@ NOM_MODELE = "llama3.2:3b"
 FUSEAU_LOCAL = ZoneInfo("Indian/Antananarivo")
 FICHIER_RAPPORT = "logs/rapport_analyses.log"
 TIMEOUT_OLLAMA = 300
-
-# URL de l'API locale d'Ollama (démarrée automatiquement par "ollama serve"
-# ou par le service système si Ollama est installé normalement).
 URL_OLLAMA = "http://localhost:11434/api/generate"
 
 
-# ----------------------------------------------------------------------
-# Nettoyage du texte renvoyé par le modèle : enlève le formatage Markdown
-# (les ** de gras, les # de titres...) pour un texte brut plus lisible
-# dans un fichier de log.
-# ----------------------------------------------------------------------
 def nettoyer_markdown(texte: str) -> str:
-    texte = re.sub(r"\*\*(.+?)\*\*", r"\1", texte)  # **gras** -> gras
-    texte = re.sub(r"^#+\s*", "", texte, flags=re.MULTILINE)  # # Titre -> Titre
+    texte = re.sub(r"\*\*(.+?)\*\*", r"\1", texte)
+    texte = re.sub(r"^#+\s*", "", texte, flags=re.MULTILINE)
     return texte.strip()
 
 
-# ----------------------------------------------------------------------
-# Conversion de timestamp (inchangé par rapport à la version précédente)
-# ----------------------------------------------------------------------
 def formater_timestamp(timestamp_iso: str) -> str:
     if timestamp_iso == "inconnu":
         return "inconnu"
@@ -72,12 +63,17 @@ def niveau_de_gravite(entry: dict) -> str:
     return entry.get("log", {}).get("level", "")
 
 
-# ----------------------------------------------------------------------
-# Appel à Ollama via son API HTTP locale (au lieu du terminal)
-# ----------------------------------------------------------------------
 def analyser_avec_ollama(entry: dict) -> str:
     erreur = entry.get("error", {})
     message = entry.get("message", "")
+
+    # CORRECTION : on extrait maintenant le stack_trace, qu'on tronque
+    # à 1500 caractères pour ne pas envoyer un prompt démesurément long
+    # (les stack traces peuvent faire des dizaines de lignes) tout en
+    # gardant les premières lignes, les plus utiles : elles contiennent
+    # la classe et la ligne exacte à l'origine de l'erreur.
+    stack_trace = erreur.get("stack_trace", "")
+    stack_trace_resume = stack_trace[:1500] if stack_trace else "non disponible"
 
     prompt = f"""Tu es un expert Spring Boot. Analyse ce log JSON (ECS).
 
@@ -88,7 +84,10 @@ N'utilise PAS de formatage Markdown (pas de **, pas de #) : réponds en
 texte brut simple.
 
 1. Que s'est-il passé exactement ?
-2. Quelle ligne de code est responsable ? (cite error.stack_trace)
+2. Quelle ligne de code est responsable ? (cite la première ligne du
+   stack_trace ci-dessous, qui indique généralement la classe et le
+   numéro de ligne à l'origine de l'erreur ; si stack_trace est "non
+   disponible", dis-le clairement)
 3. Le message contient-il un indice sur l'intention du code
    (ex: mots comme "Expected", "test", "demo") ? Si oui, cite-le.
 4. Avant de répondre à ce point, relis ta réponse au point 3.
@@ -99,17 +98,13 @@ texte brut simple.
 Message : {message}
 Type d'erreur : {erreur.get("type", "inconnu")}
 Message d'erreur : {erreur.get("message", "inconnu")}
+Stack trace (premières lignes) : {stack_trace_resume}
 """
 
     try:
         reponse = requests.post(
             URL_OLLAMA,
-            json={
-                "model": NOM_MODELE,
-                "prompt": prompt,
-                "stream": False,  # on veut la réponse complète d'un coup,
-                                  # pas un flux token par token
-            },
+            json={"model": NOM_MODELE, "prompt": prompt, "stream": False},
             timeout=TIMEOUT_OLLAMA,
         )
         reponse.raise_for_status()
