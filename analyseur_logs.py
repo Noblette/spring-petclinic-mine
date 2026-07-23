@@ -211,7 +211,7 @@ if __name__ == "__main__":
     print("=" * 60)
 
     if resultats["error"] == 0 and resultats["warn"] == 0:
-        print("✅ Aucune erreur ni avertissement détecté.")
+        print(" Aucune erreur ni avertissement détecté.") #✅
         print(f"   Tout va bien : {resultats['info']} événements normaux (INFO) observés.")
     else:
         print(f"📊 {resultats['info']} événements normaux (INFO, ignorés)")
