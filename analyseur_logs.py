@@ -66,12 +66,6 @@ def niveau_de_gravite(entry: dict) -> str:
 def analyser_avec_ollama(entry: dict) -> str:
     erreur = entry.get("error", {})
     message = entry.get("message", "")
-
-    # CORRECTION : on extrait maintenant le stack_trace, qu'on tronque
-    # à 1500 caractères pour ne pas envoyer un prompt démesurément long
-    # (les stack traces peuvent faire des dizaines de lignes) tout en
-    # gardant les premières lignes, les plus utiles : elles contiennent
-    # la classe et la ligne exacte à l'origine de l'erreur.
     stack_trace = erreur.get("stack_trace", "")
     stack_trace_resume = stack_trace[:1500] if stack_trace else "non disponible"
 
@@ -137,11 +131,18 @@ def enregistrer_rapport(timestamp_original: str, niveau: str, message: str, anal
         f.write(json.dumps(ligne_rapport, ensure_ascii=False) + "\n")
 
 
-def analyser_fichier_log(chemin_fichier: str):
+def analyser_fichier_log(chemin_fichier: str) -> dict:
+    """
+    Lit le fichier de log et retourne un compteur des événements trouvés,
+    pour permettre un résumé clair à la fin (au lieu de laisser
+    l'utilisateur deviner ce qui s'est passé en lisant le rapport brut).
+    """
+    compteurs = {"info": 0, "warn": 0, "error": 0, "lignes_ignorees": 0}
+
     chemin = Path(chemin_fichier)
     if not chemin.exists():
         print(f"❌ Fichier introuvable : {chemin_fichier}")
-        return
+        return compteurs
 
     with open(chemin, encoding="utf-8") as f:
         for numero_ligne, ligne in enumerate(f, start=1):
@@ -151,6 +152,7 @@ def analyser_fichier_log(chemin_fichier: str):
             try:
                 entry = json.loads(ligne)
             except json.JSONDecodeError:
+                compteurs["lignes_ignorees"] += 1
                 continue
 
             niveau = niveau_de_gravite(entry)
@@ -159,13 +161,16 @@ def analyser_fichier_log(chemin_fichier: str):
             message = entry.get("message", "")
 
             if niveau == "INFO":
+                compteurs["info"] += 1
                 continue
 
             elif niveau == "WARN":
+                compteurs["warn"] += 1
                 print(f"⚠️  [{timestamp_affiche}] [ligne {numero_ligne}] WARN : {message}")
                 enregistrer_rapport(timestamp_original, "WARN", message)
 
             elif niveau == "ERROR":
+                compteurs["error"] += 1
                 print(f"🔴 [{timestamp_affiche}] [ligne {numero_ligne}] ERROR détectée, analyse en cours...")
                 print(f"   Message brut : {message}\n")
 
@@ -179,6 +184,8 @@ def analyser_fichier_log(chemin_fichier: str):
 
                 enregistrer_rapport(timestamp_original, "ERROR", message, analyse)
 
+    return compteurs
+
 
 if __name__ == "__main__":
     CHEMIN_LOG = "logs/petclinic.log"
@@ -191,7 +198,31 @@ if __name__ == "__main__":
         f"(= {maintenant_local.strftime('%Y-%m-%d %H:%M:%S')} heure Madagascar) ===\n"
     )
 
-    analyser_fichier_log(CHEMIN_LOG)
+    resultats = analyser_fichier_log(CHEMIN_LOG)
 
-    print(f"\n=== Fin de l'analyse ===")
-    print(f"Rapport complet enregistré dans : {FICHIER_RAPPORT}")
+    # ------------------------------------------------------------------
+    # RÉSUMÉ FINAL EN LANGAGE HUMAIN — c'est la partie qui manquait.
+    # Peu importe le contenu technique du rapport, l'utilisateur doit
+    # pouvoir comprendre l'état général de l'application en une phrase,
+    # sans avoir à ouvrir et interpréter le fichier JSON.
+    # ------------------------------------------------------------------
+    print("=" * 60)
+    print("RÉSUMÉ")
+    print("=" * 60)
+
+    if resultats["error"] == 0 and resultats["warn"] == 0:
+        print("✅ Aucune erreur ni avertissement détecté.")
+        print(f"   Tout va bien : {resultats['info']} événements normaux (INFO) observés.")
+    else:
+        print(f"📊 {resultats['info']} événements normaux (INFO, ignorés)")
+        print(f"⚠️  {resultats['warn']} avertissement(s) (WARN)")
+        print(f"🔴 {resultats['error']} erreur(s) (ERROR) — analysée(s) par Ollama ci-dessus")
+
+    if resultats["lignes_ignorees"] > 0:
+        print(
+            f"ℹ️  {resultats['lignes_ignorees']} ligne(s) du fichier n'ont pas pu être lues "
+            f"(format inattendu, ignorées sans risque)"
+        )
+
+    print("=" * 60)
+    print(f"\nDétail complet enregistré dans : {FICHIER_RAPPORT}")
