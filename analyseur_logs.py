@@ -77,17 +77,24 @@ du JSON fourni. Si une information n'est pas déductible du log, dis
 N'utilise PAS de formatage Markdown (pas de **, pas de #) : réponds en
 texte brut simple.
 
-1. Que s'est-il passé exactement ?
-2. Quelle ligne de code est responsable ? (cite la première ligne du
-   stack_trace ci-dessous, qui indique généralement la classe et le
-   numéro de ligne à l'origine de l'erreur ; si stack_trace est "non
-   disponible", dis-le clairement)
-3. Le message contient-il un indice sur l'intention du code
-   (ex: mots comme "Expected", "test", "demo") ? Si oui, cite-le.
-4. Avant de répondre à ce point, relis ta réponse au point 3.
-   Si le comportement semble intentionnel/pédagogique, ne parle PAS
-   de "bug" ici. Ne recommande une correction que si un vrai
-   dysfonctionnement est confirmé par les données du log.
+Structure ta réponse EXACTEMENT ainsi, avec ces 4 sections, même si le
+log source n'a pas ce format :
+
+DESCRIPTION :
+(résume en 1-2 phrases ce qui s'est passé)
+
+CAUSE :
+(cite la ligne de stack_trace ou le message qui identifie la cause ;
+si non disponible, dis-le clairement)
+
+INTENTION :
+(le comportement semble-t-il intentionnel/pédagogique ? cite l'indice
+qui le suggère, ex: "Expected", "test", "demo" ; sinon dis "aucun indice")
+
+SOLUTION PROPOSÉE :
+(si un vrai dysfonctionnement est confirmé, propose une action concrète ;
+si le comportement est intentionnel, écris "Aucune action requise —
+comportement volontaire")
 
 Message : {message}
 Type d'erreur : {erreur.get("type", "inconnu")}
