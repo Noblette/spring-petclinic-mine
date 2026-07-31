@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    log4j2-spring.xml
+
+    Remplace la configuration Logback par défaut. Spring Boot détecte
+    automatiquement ce fichier une fois la dépendance
+    spring-boot-starter-log4j2 ajoutée (voir pom.xml).
+
+    Pourquoi "log4j2-spring.xml" et pas juste "log4j2.xml" :
+    le suffixe "-spring" permet d'utiliser les fonctionnalités Spring
+    dans la config (comme <SpringProfile>), et c'est le nom recommandé
+    par la documentation officielle Spring Boot.
+
+    Format choisi : TEXTE BRUT (pas JSON), comme demandé — chaque ligne
+    est lisible directement par un humain ou par une expression
+    régulière simple, contrairement au format ECS/JSON utilisé
+    précédemment avec Logback.
+-->
+<Configuration status="WARN">
+
+    <Properties>
+        <!-- Motif de mise en forme commun aux deux appenders.
+             %d{...}  : date/heure précise
+             [%t]     : nom du thread
+             %-5level : niveau, aligné sur 5 caractères (INFO, WARN...)
+             %logger{36} : nom de la classe (tronqué à 36 caractères)
+             %msg%n   : le message, puis retour à la ligne
+             %throwable : la stack trace complète si une exception existe -->
+        <Property name="MOTIF">%d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5level %logger{36} - %msg%n%throwable</Property>
+    </Properties>
+
+    <Appenders>
+
+        <!-- Sortie console : ce que tu vois dans le terminal pendant
+             que l'application tourne -->
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="${MOTIF}"/>
+        </Console>
+
+        <!-- Sortie fichier, avec rotation automatique PAR JOUR.
+             - "fileName" est le fichier ACTIF (celui où on écrit maintenant)
+             - "filePattern" définit le nom que prend le fichier une fois
+               archivé, avec %d{yyyy-MM-dd} qui insère la date du jour
+               archivé : c'est ce qui répond à la demande de ton
+               encadreur ("un fichier par jour", ce qu'il appelait "/*") -->
+        <RollingFile name="FichierJournalier"
+                     fileName="logs/petclinic.log"
+                     filePattern="logs/petclinic-%d{yyyy-MM-dd}.log.gz">
+            <PatternLayout pattern="${MOTIF}"/>
+            <Policies>
+                <!-- Déclenche une nouvelle rotation à chaque changement
+                     de jour (minuit) -->
+                <TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+                <!-- Déclenche aussi une rotation si le fichier dépasse
+                     10 Mo dans la même journée, pour éviter un fichier
+                     énorme en cas de journée très active -->
+                <SizeBasedTriggeringPolicy size="10MB"/>
+            </Policies>
+            <!-- Garde au maximum 30 jours d'archives, pour ne pas
+                 remplir le disque indéfiniment -->
+            <DefaultRolloverStrategy max="30"/>
+        </RollingFile>
+
+    </Appenders>
+
+    <Loggers>
+        <!-- Ton propre code d'application : niveau DEBUG, pour voir
+             le détail de ce qui s'y passe -->
+        <Logger name="org.springframework.samples.petclinic" level="DEBUG" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="FichierJournalier"/>
+        </Logger>
+
+        <!-- Le framework Spring lui-même : INFO suffit, DEBUG/TRACE ici
+             produirait un volume de logs très difficile à lire.
+             Pour activer TRACE partout (déconseillé sauf debug ponctuel
+             très précis), remplace INFO par TRACE ci-dessous. -->
+        <Logger name="org.springframework" level="INFO" additivity="false">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="FichierJournalier"/>
+        </Logger>
+
+        <!-- Racine : tout ce qui n'est pas explicitement couvert
+             au-dessus (Hibernate, Tomcat, etc.) -->
+        <Root level="INFO">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="FichierJournalier"/>
+        </Root>
+    </Loggers>
+
+</Configuration>

@@ -38,6 +38,32 @@
   </properties>
 
   <dependencies>
+
+    <!-- ================================================================
+         EXCLUSION ROBUSTE DE LOGBACK
+         ================================================================
+         On déclare explicitement spring-boot-starter (le starter de base
+         dont TOUS les autres starters dépendent transitivement), avec
+         l'exclusion de spring-boot-starter-logging (= Logback) placée
+         ici. Comme cette déclaration est directe (profondeur 1 dans
+         l'arbre des dépendances), Maven la préfère systématiquement aux
+         copies transitives de spring-boot-starter ramenées par
+         actuator, cache, data-jpa, thymeleaf, validation, etc.
+         Sans ce bloc, l'exclusion posée uniquement sur webmvc (voir plus
+         bas) ne suffit PAS : les autres starters ramènent quand même
+         Logback chacun de leur côté, et les deux frameworks de logging
+         se retrouvent en conflit sur le classpath. -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-starter-logging</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
     <!-- Spring and Spring Boot dependencies -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -62,16 +88,13 @@
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-webmvc</artifactId>
-
         <exclusions>
             <exclusion>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-starter-logging</artifactId>
             </exclusion>
         </exclusions>
-
     </dependency>
-
 
     <dependency>
         <groupId>org.springframework.boot</groupId>
