@@ -1,26 +1,21 @@
 """
 run_and_analyze.py
 
-Script UNIQUE qui remplace les 3 commandes manuelles :
-    ./mvnw clean package -DskipTests
-    java -jar target/*.jar
-    python3 analyseur_logs.py
+Script unique : build + lancement + surveillance temps réel.
 
-Une seule commande désormais :
-    python3 run_and_analyze.py
-
-Ce que fait le script, dans l'ordre :
-  1. Build Maven (silencieux si succès, affiche l'erreur sinon)
-  2. Lance l'application Spring Boot en arrière-plan
-  3. Surveille le fichier de log EN TEMPS RÉEL (comme "tail -f") :
-     dès qu'une nouvelle ligne WARN/ERROR/FATAL apparaît, elle est
-     immédiatement envoyée à Ollama pour analyse — pas besoin de
-     relancer quoi que ce soit.
-  4. Ctrl+C arrête proprement l'application ET le script.
-
-IMPORTANT — changement de format : les logs sont maintenant en TEXTE
-BRUT (Log4j2, voir log4j2-spring.xml), plus en JSON/ECS. Ce script lit
-donc chaque ligne avec une expression régulière au lieu de json.loads().
+CORRECTIONS de cette version :
+  1. La position de lecture est maintenant capturée AVANT le lancement
+     de l'application, pas après le délai d'attente. Sans ça, une
+     erreur de démarrage rapide (ex: port déjà utilisé, qui échoue en
+     1-3 secondes) pouvait être écrite dans le fichier AVANT que le
+     script commence à surveiller, et donc être invisible pour lui.
+  2. Message explicite "tout va bien" affiché dès le début de la
+     surveillance, plus un rappel périodique si rien ne se passe.
+  3. Le prompt Ollama réintègre les garde-fous anti-hallucination
+     (citation obligatoire, vérification du mot "Expected"/"test"/
+     "demo" avant de conclure "réelle" vs "volontaire", cohérence
+     entre les points) tout en gardant la structure en 8 points
+     demandée par l'encadreur.
 """
 
 import re
@@ -34,9 +29,6 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 
-# ------------------------------------------------------------------
-# Configuration
-# ------------------------------------------------------------------
 DOSSIER_PROJET = Path(__file__).resolve().parent
 CHEMIN_LOG = DOSSIER_PROJET / "logs" / "petclinic.log"
 NOM_MODELE = "llama3.2:3b"
@@ -44,9 +36,8 @@ FUSEAU_LOCAL = ZoneInfo("Indian/Antananarivo")
 URL_OLLAMA = "http://localhost:11434/api/generate"
 TIMEOUT_OLLAMA = 300
 NIVEAUX_A_ANALYSER = {"WARN", "ERROR", "FATAL"}
+INTERVALLE_RAPPEL_SECONDES = 120  # rappelle "tout va bien" toutes les 2 min d'inactivité
 
-# Reconnaît une ligne log4j2 qui DÉMARRE une nouvelle entrée, ex :
-# "2026-07-30 10:22:00.123 [main] ERROR o.s.s.CrashController - message"
 MOTIF_LIGNE = re.compile(
     r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})"
     r"\s\[(?P<thread>.*?)\]\s"
@@ -56,11 +47,8 @@ MOTIF_LIGNE = re.compile(
 )
 
 
-# ------------------------------------------------------------------
-# Étape 1 — build Maven
-# ------------------------------------------------------------------
 def construire_projet() -> bool:
-    print("🔨 Build Maven en cours (peut prendre 1-2 minutes)...")
+    print(" Build Maven en cours (peut prendre 1-2 minutes)...")
     resultat = subprocess.run(
         ["./mvnw", "clean", "package", "-DskipTests"],
         cwd=DOSSIER_PROJET,
@@ -72,32 +60,38 @@ def construire_projet() -> bool:
         print(resultat.stdout[-3000:])
         print(resultat.stderr[-1500:])
         return False
-    print("✅ Build réussi.\n")
+    print(" Build réussi.\n")
     return True
 
 
-# ------------------------------------------------------------------
-# Étape 2 — lancer l'application en arrière-plan
-# ------------------------------------------------------------------
+def obtenir_position_actuelle() -> int:
+    """
+    Mesure la taille actuelle du fichier de log, à appeler JUSTE AVANT
+    de lancer l'application. Tout ce qui sera écrit après cet instant
+    (y compris pendant le délai de démarrage) sera capturé — rien ne
+    peut plus être "sauté" comme avec l'ancienne version.
+    """
+    if CHEMIN_LOG.exists():
+        return CHEMIN_LOG.stat().st_size
+    return 0
+
+
 def lancer_application() -> subprocess.Popen:
     jars = list((DOSSIER_PROJET / "target").glob("*.jar"))
     jars = [j for j in jars if "original" not in j.name]
     if not jars:
         raise FileNotFoundError("Aucun .jar trouvé dans target/ après le build.")
 
-    print(f"🚀 Lancement de {jars[0].name}...")
+    print(f" Lancement de {jars[0].name}...")
     processus = subprocess.Popen(
         ["java", "-jar", str(jars[0])],
         cwd=DOSSIER_PROJET,
-        stdout=subprocess.DEVNULL,  # les logs vont déjà dans le fichier
-        stderr=subprocess.DEVNULL,  # via log4j2, pas besoin de dupliquer ici
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     return processus
 
 
-# ------------------------------------------------------------------
-# Formatage des timestamps (identique aux versions précédentes)
-# ------------------------------------------------------------------
 def formater_timestamp(ts_texte: str) -> str:
     try:
         dt_naif = datetime.strptime(ts_texte, "%Y-%m-%d %H:%M:%S.%f")
@@ -107,28 +101,43 @@ def formater_timestamp(ts_texte: str) -> str:
         return ts_texte
 
 
-# ------------------------------------------------------------------
-# Le nouveau prompt SRE — remplace l'ancien prompt ECS/JSON
-# ------------------------------------------------------------------
 def construire_prompt(niveau: str, logger: str, message: str, details_suivants: str) -> str:
     return f"""Tu es un ingénieur SRE senior spécialisé Spring Boot.
 Tu aides un développeur débutant.
-À partir du log fourni :
 
-1. explique en français simple ce qui s'est passé.
-2. indique si l'application continue à fonctionner ou non.
-3. indique la cause la plus probable.
-4. indique les indices précis dans le log.
-5. propose des commandes Linux si nécessaire.
-6. indique le niveau de gravité :
-Critique
-Élevé
-Moyen
-Faible
-7. indique si cette erreur semble volontaire (test) ou réelle.
-8. propose une action immédiate.
+RÈGLE ABSOLUE : appuie chaque affirmation sur une citation exacte du
+log fourni ci-dessous. Si une information n'est pas déductible du log,
+dis "je ne peux pas le confirmer avec ce log seul" plutôt que de deviner.
 
-Réponds uniquement en français.
+AVANT de répondre aux points 6 et 7, cherche explicitement dans le
+message et les détails ci-dessous des mots comme "Expected", "test",
+"demo", "showcase" : leur présence indique un comportement VOLONTAIRE
+et non un vrai dysfonctionnement. Si tu en trouves, tes réponses aux
+points 2 (l'application continue-t-elle ?), 6 (gravité) et 7
+(volontaire ou réelle) doivent rester cohérentes entre elles : une
+erreur volontaire isolée à une seule requête de test n'empêche PAS le
+reste de l'application de fonctionner, et sa gravité réelle est
+généralement Faible, pas Critique.
+
+À partir du log fourni, réponds EXACTEMENT dans cet ordre :
+
+1. Résumé du problème (explique en français simple ce qui s'est passé)
+2. Est-ce que l'application continue à fonctionner ? (distingue "cette
+   requête précise a échoué" de "toute l'application est indisponible")
+3. Cause la plus probable
+4. Indices précis dans le log (cite les mots/phrases exacts trouvés)  #+ligne danslo log
+5. Commandes Linux si nécessaire (sinon écris "Aucune nécessaire")
+6. Niveau de gravité : Critique / Élevé / Moyen / Faible
+   (justifie en une phrase, cohérente avec ta réponse au point 7)
+7. Cette erreur semble-t-elle volontaire (test) ou réelle ?
+   (base-toi explicitement sur la présence ou l'absence des mots
+   "Expected"/"test"/"demo"/"showcase" cités au point 4)
+8. Action immédiate proposée
+
+Réponds uniquement en français, en texte brut (pas de Markdown).
+
+
+5 et 7 pas utile satria efa hainle olona hoe
 
 Niveau du log : {niveau}
 Classe (logger) : {logger}
@@ -169,30 +178,31 @@ def enregistrer_rapport(entree: dict):
         f.write(json.dumps(entree, ensure_ascii=False) + "\n")
 
 
-# ------------------------------------------------------------------
-# Étape 3 — surveillance en temps réel (équivalent de "tail -f")
-# ------------------------------------------------------------------
-def surveiller_en_temps_reel():
-    print(f"👀 Surveillance en temps réel de {CHEMIN_LOG} (Ctrl+C pour arrêter)\n")
+def surveiller_en_temps_reel(position_depart: int):
+    print(f" Surveillance en temps réel de {CHEMIN_LOG} (Ctrl+C pour arrêter)")
+    print(" Aucune erreur détectée pour l'instant — tout va bien.\n")
 
-    # Attend que le fichier existe (le temps que Log4j2 le crée)
     while not CHEMIN_LOG.exists():
         time.sleep(0.5)
 
     with open(CHEMIN_LOG, encoding="utf-8") as f:
-        f.seek(0, 2)  # se place à la fin : on ne traite QUE le futur
+        f.seek(position_depart)  # reprend EXACTEMENT là où on s'est arrêté
+        # avant le lancement de l'app, plus rien n'est manqué
 
-        entree_courante = None  # accumulateur pour les lignes multi-lignes (stack trace)
+        entree_courante = None
+        dernier_rappel = time.monotonic()
 
         while True:
             ligne = f.readline()
 
             if not ligne:
-                # Rien de nouveau : on traite l'entrée en attente s'il y
-                # en a une, puis on patiente un peu avant de re-vérifier
                 if entree_courante:
                     traiter_entree(entree_courante)
                     entree_courante = None
+                if time.monotonic() - dernier_rappel > INTERVALLE_RAPPEL_SECONDES:
+                    heure = datetime.now(FUSEAU_LOCAL).strftime("%H:%M:%S")
+                    print(f" [{heure}] Toujours actif, aucune nouvelle erreur.")
+                    dernier_rappel = time.monotonic()
                 time.sleep(1)
                 continue
 
@@ -200,8 +210,6 @@ def surveiller_en_temps_reel():
             correspondance = MOTIF_LIGNE.match(ligne)
 
             if correspondance:
-                # Nouvelle entrée de log détectée : on traite l'ancienne
-                # (si elle existait) et on en démarre une nouvelle
                 if entree_courante:
                     traiter_entree(entree_courante)
                 entree_courante = {
@@ -212,14 +220,13 @@ def surveiller_en_temps_reel():
                     "details": "",
                 }
             elif entree_courante:
-                # Ligne de continuation (ex: ligne de stack trace "at ...")
                 entree_courante["details"] += ligne + "\n"
 
 
 def traiter_entree(entree: dict):
     niveau = entree["niveau"]
     if niveau not in NIVEAUX_A_ANALYSER:
-        return  # INFO/DEBUG/TRACE ignorés, comme avant
+        return
 
     timestamp_affiche = formater_timestamp(entree["timestamp"])
     print(f"🔴 [{timestamp_affiche}] {niveau} — {entree['logger']}")
@@ -245,12 +252,13 @@ def traiter_entree(entree: dict):
     })
 
 
-# ------------------------------------------------------------------
-# Point d'entrée
-# ------------------------------------------------------------------
 if __name__ == "__main__":
     if not construire_projet():
         sys.exit(1)
+
+    # On mesure la position AVANT de lancer l'app : c'est la correction
+    # clé de cette version, voir explication en en-tête du fichier.
+    position_avant_lancement = obtenir_position_actuelle()
 
     processus_app = lancer_application()
 
@@ -258,7 +266,7 @@ if __name__ == "__main__":
         print("\n🛑 Arrêt demandé — fermeture de l'application...")
         processus_app.terminate()
         processus_app.wait(timeout=10)
-        print("✅ Application arrêtée. Fin du script.")
+        print(" Application arrêtée. Fin du script.")
         sys.exit(0)
 
     signal.signal(signal.SIGINT, arret_propre)
@@ -267,6 +275,6 @@ if __name__ == "__main__":
     time.sleep(10)
 
     try:
-        surveiller_en_temps_reel()
+        surveiller_en_temps_reel(position_avant_lancement)
     except KeyboardInterrupt:
         arret_propre(None, None)
