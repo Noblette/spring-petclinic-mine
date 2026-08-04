@@ -1,19 +1,18 @@
 """
 run_and_analyze.py
 
-CORRECTIONS de cette version :
-  1. Prompt clarifié : le numéro de ligne est présenté comme une
-     DONNÉE FOURNIE (pas à vérifier par citation), pour éviter la
-     confusion "ligne X n'est pas spécifiée" observée en test.
-  2. stdout/stderr de l'application NE SONT PLUS jetés (DEVNULL) :
-     ils sont capturés dans logs/demarrage_stderr.log. Si l'app
-     plante AVANT que Log4j2 soit complètement initialisé (ex: port
-     déjà utilisé), l'erreur écrite sur stderr est maintenant captée
-     et analysée par Ollama, alors qu'avant elle était perdue.
-  3. Détection explicite d'un crash au démarrage (le processus se
-     termine tout seul pendant les 10s d'attente) : dans ce cas, le
-     script analyse immédiatement le contenu de stderr, sans attendre
-     une ligne dans petclinic.log qui ne viendra peut-être jamais.
+NOUVEAU dans cette version :
+  - Le prompt impose des TITRES EXPLICITES pour chaque section de la
+    réponse (DESCRIPTION, FONCTIONNEMENT, CAUSE, INDICES, GRAVITE, ACTION),
+    dans le même esprit que le "Description:" / "Action:" que Spring
+    Boot affiche lui-même pour ses propres erreurs connues.
+  - La réponse d'Ollama est maintenant DÉCOUPÉE automatiquement en un
+    dictionnaire structuré (une clé par section), stocké tel quel
+    dans le rapport JSON — plus lisible, et directement réutilisable
+    plus tard pour créer un ticket GLPI (titre = résumé, priorité =
+    gravité, etc.) sans avoir à re-parser du texte libre.
+  - L'affichage dans le terminal reprend aussi ces titres, au lieu de
+    simples numéros.
 """
 
 import re
@@ -44,6 +43,24 @@ MOTIF_LIGNE = re.compile(
     r"(?P<logger>\S+)\s-\s"
     r"(?P<message>.*)$"
 )
+
+# Les 6 sections attendues dans la réponse d'Ollama, dans cet ordre.
+# Volontairement SANS accent (RESUME, pas RÉSUMÉ) pour que la
+# reconnaissance par expression régulière soit fiable même si le
+# modèle varie légèrement sa façon d'écrire les accents.
+#SECTIONS = ["RESUME", "FONCTIONNEMENT", "CAUSE", "INDICES", "GRAVITE", "ACTION"]
+SECTIONS = ["DESCRIPTION", "FONCTIONNEMENT", "CAUSE", "INDICES", "GRAVITE", "ACTION"]
+
+# Titres affichés à l'humain (avec accents, pour la lisibilité),
+# utilisés à l'affichage terminal ET conservés dans le rapport.
+TITRES_AFFICHAGE = {
+    "DESCRIPTION": "Description",
+    "FONCTIONNEMENT": "Fonctionnement de l'application",
+    "CAUSE": "Cause probable",
+    "INDICES": "Indices dans le log",
+    "GRAVITE": "Gravité",
+    "ACTION": "Action recommandée",
+}
 
 
 def construire_projet() -> bool:
@@ -83,9 +100,6 @@ def lancer_application() -> subprocess.Popen:
     print(f"Lancement de {jars[0].name}...")
 
     Path("logs").mkdir(exist_ok=True)
-    # On capture stderr dans un fichier dédié, au lieu de le jeter.
-    # C'est ce qui permet de voir les erreurs de démarrage précoces
-    # (avant que Log4j2 lui-même soit prêt à écrire dans petclinic.log).
     fichier_stderr = open(CHEMIN_STDERR, "w", encoding="utf-8")
 
     processus = subprocess.Popen(
@@ -115,28 +129,50 @@ def construire_prompt(niveau: str, logger: str, message: str, details_suivants: 
     return f"""Tu es un ingénieur SRE senior spécialisé Spring Boot.
 Tu aides un développeur débutant.
 
-RÈGLE ABSOLUE : pour le RÉSUMÉ et la CAUSE, appuie chaque affirmation
-sur une citation exacte du log fourni ci-dessous. Si une information
-n'est pas déductible du log, dis "je ne peux pas le confirmer avec ce
-log seul" plutôt que de deviner.
+RÈGLE ABSOLUE : pour DESCRIPTION et CAUSE, appuie chaque affirmation sur une
+citation exacte du log fourni ci-dessous. Si une information n'est pas
+déductible du log, dis "je ne peux pas le confirmer avec ce log seul"
+plutôt que de deviner.
 
 IMPORTANT : le numéro de ligne fourni ci-dessous est une donnée déjà
-calculée et fiable par le système de surveillance — ce n'est PAS un
-élément à retrouver ou vérifier dans le texte du message. Utilise-le
-tel quel au point 4, sans le remettre en question.
+calculée et fiable — ce n'est PAS un élément à vérifier dans le texte.
+Utilise-le tel quel dans INDICES, sans le remettre en question.
 
-Réponds EXACTEMENT dans cet ordre :
+FORMAT DE RÉPONSE OBLIGATOIRE : réponds en français, en texte brut
+(pas de Markdown), en respectant EXACTEMENT cette structure — chaque
+titre ci-dessous seul sur sa ligne, suivi de ":", puis le contenu :
 
-1. Résumé du problème (explique en français simple ce qui s'est passé)
-2. Est-ce que l'application continue à fonctionner ?
-3. Cause la plus probable
-4. Indices précis dans le log : cite les mots/phrases exacts trouvés
-   dans le message, ET précise la référence de ligne donnée ci-dessous
-5. Niveau de gravité : Critique / Élevé / Moyen / Faible
-   (justifie ta réponse en une phrase)
-6. Action immédiate proposée
+DESCRIPTION:
+(résume en 1-2 phrases ce qui s'est passé)
 
-Réponds uniquement en français, en texte brut (pas de Markdown).
+FONCTIONNEMENT:
+(l'application continue-t-elle à fonctionner ? distingue "cette
+requête précise a échoué" de "toute l'application est indisponible")
+
+CAUSE:
+(la cause la plus probable)
+
+INDICES:
+(cite les mots/phrases exacts trouvés dans le message, et précise la
+référence de ligne donnée ci-dessous)
+Obligatoirement :
+
+- Ligne : <numéro fourni ci-dessous>
+
+- Citation exacte n°1
+
+- Citation exacte n°2
+
+- Citation exacte n°3
+
+N'invente aucune citation.
+
+GRAVITE:
+(un seul mot parmi : Critique / Eleve / Moyen / Faible, puis une
+phrase de justification)
+
+ACTION:
+(action immédiate proposée)
 
 {reference_ligne}Niveau du log : {niveau}
 Classe (logger) : {logger}
@@ -152,7 +188,34 @@ def nettoyer_markdown(texte: str) -> str:
     return texte.strip()
 
 
-def analyser_avec_ollama(niveau: str, logger: str, message: str, details: str, numero_ligne) -> str:
+# ----------------------------------------------------------------------
+# NOUVEAU : découpe la réponse brute d'Ollama en sections nommées
+# ----------------------------------------------------------------------
+def extraire_sections(texte: str) -> dict:
+    motif = re.compile(
+        r"(?:^|\n)\s*(" + "|".join(SECTIONS) + r")\s*:\s*\n?",
+        re.IGNORECASE,
+    )
+    morceaux = motif.split(texte)
+
+    resultat = {cle: "" for cle in SECTIONS}
+    # morceaux ressemble à : [avant_premier_titre, TITRE1, contenu1, TITRE2, contenu2, ...]
+    for i in range(1, len(morceaux) - 1, 2):
+        cle = morceaux[i].strip().upper()
+        contenu = morceaux[i + 1].strip()
+        if cle in resultat:
+            resultat[cle] = contenu
+
+    # Si le modèle n'a pas du tout respecté le format (aucune section
+    # reconnue), on garde le texte brut entier dans RESUME plutôt que
+    # de perdre l'information.
+    if all(v == "" for v in resultat.values()):
+        resultat["DESCRIPTION"] = texte.strip()
+
+    return resultat
+
+
+def analyser_avec_ollama(niveau: str, logger: str, message: str, details: str, numero_ligne) -> dict:
     prompt = construire_prompt(niveau, logger, message, details, numero_ligne)
     try:
         reponse = requests.post(
@@ -161,13 +224,23 @@ def analyser_avec_ollama(niveau: str, logger: str, message: str, details: str, n
             timeout=TIMEOUT_OLLAMA,
         )
         reponse.raise_for_status()
-        return nettoyer_markdown(reponse.json().get("response", ""))
+        texte_brut = nettoyer_markdown(reponse.json().get("response", ""))
+        return extraire_sections(texte_brut)
+
     except requests.exceptions.ConnectionError:
-        return "[Impossible de joindre Ollama — vérifie qu'il tourne : ollama serve]"
+        return {"DESCRIPTION": "[Impossible de joindre Ollama — vérifie qu'il tourne : ollama serve]"}
     except requests.exceptions.Timeout:
-        return f"[Timeout après {TIMEOUT_OLLAMA}s]"
+        return {"DESCRIPTION": f"[Timeout après {TIMEOUT_OLLAMA}s]"}
     except requests.exceptions.RequestException as e:
-        return f"[Erreur Ollama : {e}]"
+        return {"DESCRIPTION": f"[Erreur Ollama : {e}]"}
+
+
+def afficher_analyse(sections: dict):
+    for cle in SECTIONS:
+        contenu = sections.get(cle, "").strip()
+        if contenu:
+            print(f"{TITRES_AFFICHAGE[cle]} :")
+            print(f"   {contenu}\n")
 
 
 def chemin_rapport_du_jour() -> Path:
@@ -187,11 +260,6 @@ def enregistrer_rapport(entree: dict):
         f.write(json.dumps(entree_complete, ensure_ascii=False) + "\n")
 
 
-# ----------------------------------------------------------------------
-# NOUVEAU : analyse d'un crash survenu AVANT que petclinic.log existe
-# ou contienne quoi que ce soit d'exploitable (ex: port déjà utilisé,
-# détecté par Spring Boot avant même que Log4j2 soit opérationnel)
-# ----------------------------------------------------------------------
 def analyser_crash_demarrage():
     contenu_stderr = CHEMIN_STDERR.read_text(encoding="utf-8", errors="replace").strip()
 
@@ -204,13 +272,11 @@ def analyser_crash_demarrage():
     print("   Analyse Ollama en cours...")
 
     debut = datetime.now(timezone.utc)
-    analyse = analyser_avec_ollama(
-        "ERROR", "démarrage (stderr)", contenu_stderr[:1500], "", None
-    )
+    sections = analyser_avec_ollama("ERROR", "démarrage (stderr)", contenu_stderr[:1500], "", None)
     duree = (datetime.now(timezone.utc) - debut).total_seconds()
 
     print(f"---- Analyse Ollama (durée : {duree:.1f}s) ----")
-    print(analyse)
+    afficher_analyse(sections)
     print("-------------------------\n")
 
     enregistrer_rapport({
@@ -221,7 +287,7 @@ def analyser_crash_demarrage():
         "niveau": "ERROR",
         "logger": "démarrage (stderr, avant Log4j2)",
         "message": contenu_stderr[:500],
-        "analyse_llm": analyse,
+        "analyse": sections,
     })
 
 
@@ -277,13 +343,13 @@ def traiter_entree(entree: dict):
     print("   Analyse Ollama en cours...")
 
     debut = datetime.now(timezone.utc)
-    analyse = analyser_avec_ollama(
+    sections = analyser_avec_ollama(
         niveau, entree["logger"], entree["message"], entree["details"], entree["numero_ligne"]
     )
     duree = (datetime.now(timezone.utc) - debut).total_seconds()
 
     print(f"---- Analyse Ollama (durée : {duree:.1f}s) ----")
-    print(analyse)
+    afficher_analyse(sections)
     print("-------------------------\n")
 
     enregistrer_rapport({
@@ -294,7 +360,7 @@ def traiter_entree(entree: dict):
         "niveau": niveau,
         "logger": entree["logger"],
         "message": entree["message"],
-        "analyse_llm": analyse,
+        "analyse": sections,
     })
 
 
@@ -319,10 +385,6 @@ if __name__ == "__main__":
     print("Attente du démarrage de l'application (10s)...\n")
     time.sleep(10)
 
-    # NOUVEAU : si le processus s'est déjà arrêté tout seul pendant
-    # cette attente, c'est un crash au démarrage (ex: port occupé) —
-    # on l'analyse tout de suite via stderr, plutôt que d'attendre en
-    # vain une ligne dans petclinic.log qui ne viendra jamais.
     if processus_app.poll() is not None:
         fichier_stderr.close()
         analyser_crash_demarrage()
