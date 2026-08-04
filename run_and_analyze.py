@@ -111,9 +111,16 @@ def construire_prompt(niveau: str, logger: str, message: str, details_suivants: 
     return f"""Tu es un ingénieur SRE senior spécialisé Spring Boot.
 Tu aides un développeur débutant.
 
-RÈGLE ABSOLUE : appuie chaque affirmation sur une citation exacte du
-log fourni ci-dessous. Si une information n'est pas déductible du log,
-dis "je ne peux pas le confirmer avec ce log seul" plutôt que de deviner.
+RÈGLE ABSOLUE : pour le RÉSUMÉ et la CAUSE, appuie chaque affirmation
+sur une citation exacte du log fourni ci-dessous. Si une information
+n'est pas déductible du log, dis "je ne peux pas le confirmer avec ce
+log seul" plutôt que de deviner.
+
+IMPORTANT : le numéro de ligne indiqué ci-dessous (Numéro de ligne
+dans le fichier de log) est une donnée déjà calculée et fiable, fournie
+par le système de surveillance — ce n'est PAS un élément à retrouver
+ou vérifier dans le texte du message. Utilise-le tel quel au point 4,
+sans le remettre en question.
 
 Réponds EXACTEMENT dans cet ordre :
 
@@ -121,14 +128,15 @@ Réponds EXACTEMENT dans cet ordre :
 2. Est-ce que l'application continue à fonctionner ? (distingue "cette
    requête précise a échoué" de "toute l'application est indisponible")
 3. Cause la plus probable
-4. Indices précis dans le log : cite les mots/phrases exacts trouvés,
-   ET indique la ligne {numero_ligne} du fichier comme référence
+4. Indices précis dans le log : cite les mots/phrases exacts trouvés
+   dans le message, ET précise "ligne {numero_ligne} du fichier de log"
 5. Niveau de gravité : Critique / Élevé / Moyen / Faible
    (justifie ta réponse en une phrase)
 6. Action immédiate proposée
 
 Réponds uniquement en français, en texte brut (pas de Markdown).
 
+Numéro de ligne dans le fichier de log : {numero_ligne}
 Niveau du log : {niveau}
 Classe (logger) : {logger}
 Message : {message}
