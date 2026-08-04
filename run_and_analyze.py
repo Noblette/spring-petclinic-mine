@@ -1,19 +1,19 @@
 """
 run_and_analyze.py
 
-Script unique : build + lancement + surveillance temps réel.
-
-CHANGEMENTS demandés par l'encadreur (compte rendu du 31/07) :
-  1. Prompt réduit à 6 points : retrait des commandes Linux (destinées
-     à un expert Linux, pas nécessaires ici) et du point "volontaire
-     vs réelle" (jugé superflu). Le point 4 inclut maintenant le
-     numéro de ligne exact dans le fichier de log.
-  2. Log4j2 n'archive plus automatiquement (.gz) : un seul fichier
-     plat, sans rotation ni compression.
-  3. Le rapport d'analyses est maintenant un fichier PAR JOUR
-     (logs/rapport_analyses_AAAA-MM-JJ.log), avec horodatage précis
-     heure/minute/seconde à chaque entrée.
-  4. Le rappel périodique "Toujours actif" a été retiré.
+CORRECTIONS de cette version :
+  1. Prompt clarifié : le numéro de ligne est présenté comme une
+     DONNÉE FOURNIE (pas à vérifier par citation), pour éviter la
+     confusion "ligne X n'est pas spécifiée" observée en test.
+  2. stdout/stderr de l'application NE SONT PLUS jetés (DEVNULL) :
+     ils sont capturés dans logs/demarrage_stderr.log. Si l'app
+     plante AVANT que Log4j2 soit complètement initialisé (ex: port
+     déjà utilisé), l'erreur écrite sur stderr est maintenant captée
+     et analysée par Ollama, alors qu'avant elle était perdue.
+  3. Détection explicite d'un crash au démarrage (le processus se
+     termine tout seul pendant les 10s d'attente) : dans ce cas, le
+     script analyse immédiatement le contenu de stderr, sans attendre
+     une ligne dans petclinic.log qui ne viendra peut-être jamais.
 """
 
 import re
@@ -30,6 +30,7 @@ from zoneinfo import ZoneInfo
 
 DOSSIER_PROJET = Path(__file__).resolve().parent
 CHEMIN_LOG = DOSSIER_PROJET / "logs" / "petclinic.log"
+CHEMIN_STDERR = DOSSIER_PROJET / "logs" / "demarrage_stderr.log"
 NOM_MODELE = "llama3.2:3b"
 FUSEAU_LOCAL = ZoneInfo("Indian/Antananarivo")
 URL_OLLAMA = "http://localhost:11434/api/generate"
@@ -63,12 +64,6 @@ def construire_projet() -> bool:
 
 
 def obtenir_position_et_nombre_lignes() -> tuple[int, int]:
-    """
-    Retourne (position en octets, nombre de lignes déjà présentes),
-    en comptant les lignes une par une (comme le fait un éditeur de
-    texte), plutôt qu'en comptant les '\n' sur un bloc lu d'un coup —
-    ce qui évite tout décalage en cas de ligne finale non terminée.
-    """
     if not CHEMIN_LOG.exists():
         return 0, 0
     nombre_lignes = 0
@@ -86,13 +81,20 @@ def lancer_application() -> subprocess.Popen:
         raise FileNotFoundError("Aucun .jar trouvé dans target/ après le build.")
 
     print(f"Lancement de {jars[0].name}...")
+
+    Path("logs").mkdir(exist_ok=True)
+    # On capture stderr dans un fichier dédié, au lieu de le jeter.
+    # C'est ce qui permet de voir les erreurs de démarrage précoces
+    # (avant que Log4j2 lui-même soit prêt à écrire dans petclinic.log).
+    fichier_stderr = open(CHEMIN_STDERR, "w", encoding="utf-8")
+
     processus = subprocess.Popen(
         ["java", "-jar", str(jars[0])],
         cwd=DOSSIER_PROJET,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stderr=fichier_stderr,
     )
-    return processus
+    return processus, fichier_stderr
 
 
 def formater_timestamp(ts_texte: str) -> str:
@@ -104,10 +106,12 @@ def formater_timestamp(ts_texte: str) -> str:
         return ts_texte
 
 
-# ----------------------------------------------------------------------
-# NOUVEAU PROMPT — 6 points au lieu de 8, point 4 avec numéro de ligne
-# ----------------------------------------------------------------------
-def construire_prompt(niveau: str, logger: str, message: str, details_suivants: str, numero_ligne: int) -> str:
+def construire_prompt(niveau: str, logger: str, message: str, details_suivants: str, numero_ligne) -> str:
+    reference_ligne = (
+        f"Numéro de ligne dans le fichier de log : {numero_ligne}\n"
+        if numero_ligne is not None
+        else "Numéro de ligne : non disponible (erreur survenue avant l'écriture du fichier de log)\n"
+    )
     return f"""Tu es un ingénieur SRE senior spécialisé Spring Boot.
 Tu aides un développeur débutant.
 
@@ -116,28 +120,25 @@ sur une citation exacte du log fourni ci-dessous. Si une information
 n'est pas déductible du log, dis "je ne peux pas le confirmer avec ce
 log seul" plutôt que de deviner.
 
-IMPORTANT : le numéro de ligne indiqué ci-dessous (Numéro de ligne
-dans le fichier de log) est une donnée déjà calculée et fiable, fournie
-par le système de surveillance — ce n'est PAS un élément à retrouver
-ou vérifier dans le texte du message. Utilise-le tel quel au point 4,
-sans le remettre en question.
+IMPORTANT : le numéro de ligne fourni ci-dessous est une donnée déjà
+calculée et fiable par le système de surveillance — ce n'est PAS un
+élément à retrouver ou vérifier dans le texte du message. Utilise-le
+tel quel au point 4, sans le remettre en question.
 
 Réponds EXACTEMENT dans cet ordre :
 
 1. Résumé du problème (explique en français simple ce qui s'est passé)
-2. Est-ce que l'application continue à fonctionner ? (distingue "cette
-   requête précise a échoué" de "toute l'application est indisponible")
+2. Est-ce que l'application continue à fonctionner ?
 3. Cause la plus probable
 4. Indices précis dans le log : cite les mots/phrases exacts trouvés
-   dans le message, ET précise "ligne {numero_ligne} du fichier de log"
+   dans le message, ET précise la référence de ligne donnée ci-dessous
 5. Niveau de gravité : Critique / Élevé / Moyen / Faible
    (justifie ta réponse en une phrase)
 6. Action immédiate proposée
 
 Réponds uniquement en français, en texte brut (pas de Markdown).
 
-Numéro de ligne dans le fichier de log : {numero_ligne}
-Niveau du log : {niveau}
+{reference_ligne}Niveau du log : {niveau}
 Classe (logger) : {logger}
 Message : {message}
 Détails complémentaires (stack trace éventuelle, tronquée) :
@@ -151,7 +152,7 @@ def nettoyer_markdown(texte: str) -> str:
     return texte.strip()
 
 
-def analyser_avec_ollama(niveau: str, logger: str, message: str, details: str, numero_ligne: int) -> str:
+def analyser_avec_ollama(niveau: str, logger: str, message: str, details: str, numero_ligne) -> str:
     prompt = construire_prompt(niveau, logger, message, details, numero_ligne)
     try:
         reponse = requests.post(
@@ -169,9 +170,6 @@ def analyser_avec_ollama(niveau: str, logger: str, message: str, details: str, n
         return f"[Erreur Ollama : {e}]"
 
 
-# ----------------------------------------------------------------------
-# NOUVEAU : rapport organisé PAR JOUR (un fichier par date)
-# ----------------------------------------------------------------------
 def chemin_rapport_du_jour() -> Path:
     aujourdhui = datetime.now(FUSEAU_LOCAL).strftime("%Y-%m-%d")
     return DOSSIER_PROJET / "logs" / f"rapport_analyses_{aujourdhui}.log"
@@ -189,6 +187,44 @@ def enregistrer_rapport(entree: dict):
         f.write(json.dumps(entree_complete, ensure_ascii=False) + "\n")
 
 
+# ----------------------------------------------------------------------
+# NOUVEAU : analyse d'un crash survenu AVANT que petclinic.log existe
+# ou contienne quoi que ce soit d'exploitable (ex: port déjà utilisé,
+# détecté par Spring Boot avant même que Log4j2 soit opérationnel)
+# ----------------------------------------------------------------------
+def analyser_crash_demarrage():
+    contenu_stderr = CHEMIN_STDERR.read_text(encoding="utf-8", errors="replace").strip()
+
+    if not contenu_stderr:
+        print("Le processus s'est arrêté tôt, mais stderr est vide — cause indéterminée.\n")
+        return
+
+    print("L'application s'est arrêtée pendant le démarrage — analyse de stderr...")
+    print(f"   Extrait : {contenu_stderr[:300]}\n")
+    print("   Analyse Ollama en cours...")
+
+    debut = datetime.now(timezone.utc)
+    analyse = analyser_avec_ollama(
+        "ERROR", "démarrage (stderr)", contenu_stderr[:1500], "", None
+    )
+    duree = (datetime.now(timezone.utc) - debut).total_seconds()
+
+    print(f"---- Analyse Ollama (durée : {duree:.1f}s) ----")
+    print(analyse)
+    print("-------------------------\n")
+
+    enregistrer_rapport({
+        "timestamp_evenement": datetime.now(FUSEAU_LOCAL).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+        "timestamp_evenement_lisible": datetime.now(FUSEAU_LOCAL).strftime("%Y-%m-%d %H:%M:%S") + " heure Madagascar",
+        "numero_ligne": None,
+        "timestamp_analyse_utc": datetime.now(timezone.utc).isoformat(),
+        "niveau": "ERROR",
+        "logger": "démarrage (stderr, avant Log4j2)",
+        "message": contenu_stderr[:500],
+        "analyse_llm": analyse,
+    })
+
+
 def surveiller_en_temps_reel(position_depart: int, numero_ligne_initial: int):
     print(f"Surveillance en temps réel de {CHEMIN_LOG} (Ctrl+C pour arrêter)")
     print("Aucune erreur détectée pour l'instant — tout va bien.\n")
@@ -198,12 +234,7 @@ def surveiller_en_temps_reel(position_depart: int, numero_ligne_initial: int):
 
     with open(CHEMIN_LOG, encoding="utf-8") as f:
         f.seek(position_depart)
-
-        # On compte les lignes déjà lues avant ce lancement, pour que
-        # le numéro affiché corresponde à la vraie position dans le
-        # fichier complet (utile pour le point 4 du prompt).
         numero_ligne = numero_ligne_initial
-
         entree_courante = None
 
         while True:
@@ -273,12 +304,13 @@ if __name__ == "__main__":
 
     position_avant_lancement, lignes_avant_lancement = obtenir_position_et_nombre_lignes()
 
-    processus_app = lancer_application()
+    processus_app, fichier_stderr = lancer_application()
 
     def arret_propre(signum, frame):
         print("\nArrêt demandé — fermeture de l'application...")
         processus_app.terminate()
         processus_app.wait(timeout=10)
+        fichier_stderr.close()
         print("Application arrêtée. Fin du script.")
         sys.exit(0)
 
@@ -286,6 +318,16 @@ if __name__ == "__main__":
 
     print("Attente du démarrage de l'application (10s)...\n")
     time.sleep(10)
+
+    # NOUVEAU : si le processus s'est déjà arrêté tout seul pendant
+    # cette attente, c'est un crash au démarrage (ex: port occupé) —
+    # on l'analyse tout de suite via stderr, plutôt que d'attendre en
+    # vain une ligne dans petclinic.log qui ne viendra jamais.
+    if processus_app.poll() is not None:
+        fichier_stderr.close()
+        analyser_crash_demarrage()
+        print("L'application n'a pas pu démarrer. Fin du script.")
+        sys.exit(1)
 
     try:
         surveiller_en_temps_reel(position_avant_lancement, lignes_avant_lancement)
