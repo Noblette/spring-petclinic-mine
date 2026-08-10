@@ -1,0 +1,15 @@
+======================================================================
+INCIDENT DETECTE
+======================================================================
+
+Date : 2026-08-04 16:40:16 heure Madagascar
+Niveau : WARN
+Logger : org.springframework.boot.web.server.servlet.context.AnnotationConfigServletWebServerApplicationContext
+Ligne : 35
+
+----------------------------------------------------------------------
+MESSAGE PRINCIPAL
+----------------------------------------------------------------------
+
+Exception encountered during context initialization - cancelling refresh attempt: org.springframework.context.ApplicationContextException: Failed to start bean 'webServerStartStop'
+

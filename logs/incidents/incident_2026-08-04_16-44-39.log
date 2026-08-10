@@ -1,0 +1,32 @@
+======================================================================
+INCIDENT DETECTE
+======================================================================
+
+Date : 2026-08-04 16:40:16 heure Madagascar
+Niveau : ERROR
+Logger : org.springframework.boot.diagnostics.LoggingFailureAnalysisReporter
+Ligne : 42
+
+----------------------------------------------------------------------
+MESSAGE PRINCIPAL
+----------------------------------------------------------------------
+
+
+
+----------------------------------------------------------------------
+STACKTRACE COMPLETE
+----------------------------------------------------------------------
+
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Web server failed to start. Port 8080 was already in use.
+
+Action:
+
+Identify and stop the process that's listening on port 8080 or configure this application to listen on another port.
+

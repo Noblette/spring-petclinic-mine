@@ -25,11 +25,15 @@ import json
 from pathlib import Path
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
+import smtplib
+
+from email.message import EmailMessage
 
 
 DOSSIER_PROJET = Path(__file__).resolve().parent
 CHEMIN_LOG = DOSSIER_PROJET / "logs" / "petclinic.log"
 CHEMIN_STDERR = DOSSIER_PROJET / "logs" / "demarrage_stderr.log"
+CHEMIN_INCIDENTS = DOSSIER_PROJET / "logs" / "incidents"
 NOM_MODELE = "llama3.2:3b"
 FUSEAU_LOCAL = ZoneInfo("Indian/Antananarivo")
 URL_OLLAMA = "http://localhost:11434/api/generate"
@@ -352,6 +356,14 @@ def traiter_entree(entree: dict):
     afficher_analyse(sections)
     print("-------------------------\n")
 
+    preuve = creer_fichier_incident(entree)
+    #ty
+    envoyer_email(sections,preuve)
+    
+    
+                                                                        
+
+
     enregistrer_rapport({
         "timestamp_evenement": entree["timestamp"],
         "timestamp_evenement_lisible": timestamp_affiche,
@@ -361,7 +373,110 @@ def traiter_entree(entree: dict):
         "logger": entree["logger"],
         "message": entree["message"],
         "analyse": sections,
+        "preuve": str(preuve),
     })
+
+#ty
+
+def creer_fichier_incident(entree: dict) -> Path:
+    """
+    Crée un extrait complet du log autour d'un incident.
+    Retourne le chemin du fichier créé.
+    """
+
+    CHEMIN_INCIDENTS.mkdir(parents=True, exist_ok=True)
+
+    nom = datetime.now(FUSEAU_LOCAL).strftime(
+        "incident_%Y-%m-%d_%H-%M-%S.log"
+    )
+
+    chemin = CHEMIN_INCIDENTS / nom
+
+    with open(chemin, "w", encoding="utf-8") as f:
+
+        f.write("=" * 70 + "\n")
+        f.write("INCIDENT DETECTE\n")
+        f.write("=" * 70 + "\n\n")
+
+        f.write(f"Date : {formater_timestamp(entree['timestamp'])}\n")
+        f.write(f"Niveau : {entree['niveau']}\n")
+        f.write(f"Logger : {entree['logger']}\n")
+        f.write(f"Ligne : {entree['numero_ligne']}\n\n")
+
+        f.write("-" * 70 + "\n")
+        f.write("MESSAGE PRINCIPAL\n")
+        f.write("-" * 70 + "\n\n")
+
+        f.write(entree["message"] + "\n\n")
+
+        if entree["details"].strip():
+
+            f.write("-" * 70 + "\n")
+            f.write("STACKTRACE COMPLETE\n")
+            f.write("-" * 70 + "\n\n")
+
+            f.write(entree["details"])
+
+    return chemin
+
+def envoyer_email(
+                analyse,
+                fichier_incident
+        ):
+
+            expediteur = "noblette.tsimihanta@gmail.com"
+
+            mot_de_passe = "knex wyzt tlor zmwk"
+
+            destinataire = "noblette.tsimihanta@gmail.com"
+
+            message = EmailMessage()
+
+            message["Subject"] = "[AIOps] Incident détecté"
+
+            message["From"] = expediteur
+
+            message["To"] = destinataire
+
+            corps = f"""
+        Un incident vient d'être détecté.
+
+        Description :
+
+        {analyse['DESCRIPTION']}
+
+        Cause :
+
+        {analyse['CAUSE']}
+
+        Gravité :
+
+        {analyse['GRAVITE']}
+
+        Action :
+
+        {analyse['ACTION']}
+        """
+
+            message.set_content(corps)
+
+            with open(fichier_incident, "rb") as f:
+
+                message.add_attachment(
+                    f.read(),
+                    maintype="text",
+                    subtype="plain",
+                    filename=fichier_incident.name
+                )
+
+            with smtplib.SMTP_SSL("smtp.gmail.com",465) as smtp:
+
+                smtp.login(expediteur,mot_de_passe)
+
+                smtp.send_message(message)
+
+#ty
+
 
 
 if __name__ == "__main__":
