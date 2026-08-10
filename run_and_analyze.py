@@ -1,18 +1,19 @@
 """
 run_and_analyze.py
 
-NOUVEAU dans cette version :
-  - Le prompt impose des TITRES EXPLICITES pour chaque section de la
-    réponse (DESCRIPTION, FONCTIONNEMENT, CAUSE, INDICES, GRAVITE, ACTION),
-    dans le même esprit que le "Description:" / "Action:" que Spring
-    Boot affiche lui-même pour ses propres erreurs connues.
-  - La réponse d'Ollama est maintenant DÉCOUPÉE automatiquement en un
-    dictionnaire structuré (une clé par section), stocké tel quel
-    dans le rapport JSON — plus lisible, et directement réutilisable
-    plus tard pour créer un ticket GLPI (titre = résumé, priorité =
-    gravité, etc.) sans avoir à re-parser du texte libre.
-  - L'affichage dans le terminal reprend aussi ces titres, au lieu de
-    simples numéros.
+CORRECTIONS de cette version :
+  1. BUG DE TRONCATURE CORRIGÉ : le script finalisait une entrée dès
+     le premier cycle sans nouvelle donnée détectée, ce qui pouvait
+     couper un bloc multi-lignes en plein milieu si Java l'écrivait
+     en plusieurs petites écritures avec de micro-pauses entre elles
+     (observé concrètement : "Web server failed to " coupé avant
+     "start"). Corrigé avec un "debounce" : on attend plusieurs
+     cycles consécutifs sans nouvelle ligne avant de considérer
+     qu'une entrée est vraiment terminée.
+  2. CONTEXTE AJOUTÉ : un tampon glissant garde les 20 dernières
+     lignes brutes du log (tous niveaux confondus), pour que le
+     fichier de preuve/l'email montrent aussi ce qui précédait
+     l'erreur (comme dans VSCode), pas seulement le bloc isolé.
 """
 
 import re
@@ -22,11 +23,11 @@ import time
 import signal
 import requests
 import json
+import smtplib
+from collections import deque
 from pathlib import Path
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-import smtplib
-
 from email.message import EmailMessage
 
 
@@ -39,6 +40,7 @@ FUSEAU_LOCAL = ZoneInfo("Indian/Antananarivo")
 URL_OLLAMA = "http://localhost:11434/api/generate"
 TIMEOUT_OLLAMA = 300
 NIVEAUX_A_ANALYSER = {"WARN", "ERROR", "FATAL"}
+LIGNES_DE_CONTEXTE = 20  # nombre de lignes brutes gardées avant l'incident
 
 MOTIF_LIGNE = re.compile(
     r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})"
@@ -48,15 +50,8 @@ MOTIF_LIGNE = re.compile(
     r"(?P<message>.*)$"
 )
 
-# Les 6 sections attendues dans la réponse d'Ollama, dans cet ordre.
-# Volontairement SANS accent (RESUME, pas RÉSUMÉ) pour que la
-# reconnaissance par expression régulière soit fiable même si le
-# modèle varie légèrement sa façon d'écrire les accents.
-#SECTIONS = ["RESUME", "FONCTIONNEMENT", "CAUSE", "INDICES", "GRAVITE", "ACTION"]
 SECTIONS = ["DESCRIPTION", "FONCTIONNEMENT", "CAUSE", "INDICES", "GRAVITE", "ACTION"]
 
-# Titres affichés à l'humain (avec accents, pour la lisibilité),
-# utilisés à l'affichage terminal ET conservés dans le rapport.
 TITRES_AFFICHAGE = {
     "DESCRIPTION": "Description",
     "FONCTIONNEMENT": "Fonctionnement de l'application",
@@ -65,6 +60,13 @@ TITRES_AFFICHAGE = {
     "GRAVITE": "Gravité",
     "ACTION": "Action recommandée",
 }
+
+# Configuration email (à adapter / idéalement à sortir dans des
+# variables d'environnement plutôt que codées en dur, voir remarque
+# de sécurité en fin de fichier)
+EMAIL_EXPEDITEUR = "noblette.tsimihanta@gmail.com"
+EMAIL_MOT_DE_PASSE = "knex wyzt tlor zmwk"
+EMAIL_DESTINATAIRE = "noblette.tsimihanta@gmail.com"
 
 
 def construire_projet() -> bool:
@@ -133,14 +135,13 @@ def construire_prompt(niveau: str, logger: str, message: str, details_suivants: 
     return f"""Tu es un ingénieur SRE senior spécialisé Spring Boot.
 Tu aides un développeur débutant.
 
-RÈGLE ABSOLUE : pour DESCRIPTION et CAUSE, appuie chaque affirmation sur une
-citation exacte du log fourni ci-dessous. Si une information n'est pas
-déductible du log, dis "je ne peux pas le confirmer avec ce log seul"
-plutôt que de deviner.
+RÈGLE ABSOLUE : pour DESCRIPTION et CAUSE, appuie chaque affirmation
+sur une citation exacte du log fourni ci-dessous. Si une information
+n'est pas déductible du log, dis "je ne peux pas le confirmer avec ce
+log seul" plutôt que de deviner.
 
 IMPORTANT : le numéro de ligne fourni ci-dessous est une donnée déjà
 calculée et fiable — ce n'est PAS un élément à vérifier dans le texte.
-Utilise-le tel quel dans INDICES, sans le remettre en question.
 
 FORMAT DE RÉPONSE OBLIGATOIRE : réponds en français, en texte brut
 (pas de Markdown), en respectant EXACTEMENT cette structure — chaque
@@ -150,26 +151,13 @@ DESCRIPTION:
 (résume en 1-2 phrases ce qui s'est passé)
 
 FONCTIONNEMENT:
-(l'application continue-t-elle à fonctionner ? distingue "cette
-requête précise a échoué" de "toute l'application est indisponible")
+(l'application continue-t-elle à fonctionner ?)
 
 CAUSE:
 (la cause la plus probable)
 
 INDICES:
-(cite les mots/phrases exacts trouvés dans le message, et précise la
-référence de ligne donnée ci-dessous)
-Obligatoirement :
-
-- Ligne : <numéro fourni ci-dessous>
-
-- Citation exacte n°1
-
-- Citation exacte n°2
-
-- Citation exacte n°3
-
-N'invente aucune citation.
+(cite les mots/phrases exacts trouvés dans le message)
 
 GRAVITE:
 (un seul mot parmi : Critique / Eleve / Moyen / Faible, puis une
@@ -192,9 +180,6 @@ def nettoyer_markdown(texte: str) -> str:
     return texte.strip()
 
 
-# ----------------------------------------------------------------------
-# NOUVEAU : découpe la réponse brute d'Ollama en sections nommées
-# ----------------------------------------------------------------------
 def extraire_sections(texte: str) -> dict:
     motif = re.compile(
         r"(?:^|\n)\s*(" + "|".join(SECTIONS) + r")\s*:\s*\n?",
@@ -203,16 +188,12 @@ def extraire_sections(texte: str) -> dict:
     morceaux = motif.split(texte)
 
     resultat = {cle: "" for cle in SECTIONS}
-    # morceaux ressemble à : [avant_premier_titre, TITRE1, contenu1, TITRE2, contenu2, ...]
     for i in range(1, len(morceaux) - 1, 2):
         cle = morceaux[i].strip().upper()
         contenu = morceaux[i + 1].strip()
         if cle in resultat:
             resultat[cle] = contenu
 
-    # Si le modèle n'a pas du tout respecté le format (aucune section
-    # reconnue), on garde le texte brut entier dans RESUME plutôt que
-    # de perdre l'information.
     if all(v == "" for v in resultat.values()):
         resultat["DESCRIPTION"] = texte.strip()
 
@@ -229,7 +210,19 @@ def analyser_avec_ollama(niveau: str, logger: str, message: str, details: str, n
         )
         reponse.raise_for_status()
         texte_brut = nettoyer_markdown(reponse.json().get("response", ""))
-        return extraire_sections(texte_brut)
+        sections = extraire_sections(texte_brut)
+
+        reference = (
+            f"ligne {numero_ligne} du fichier de log"
+            if numero_ligne is not None
+            else "avant écriture dans le fichier de log (voir stderr)"
+        )
+        if sections["INDICES"]:
+            sections["INDICES"] += f"\n(Référence : {reference})"
+        else:
+            sections["INDICES"] = f"(Référence : {reference})"
+
+        return sections
 
     except requests.exceptions.ConnectionError:
         return {"DESCRIPTION": "[Impossible de joindre Ollama — vérifie qu'il tourne : ollama serve]"}
@@ -262,6 +255,79 @@ def enregistrer_rapport(entree: dict):
     }
     with open(chemin_rapport_du_jour(), "a", encoding="utf-8") as f:
         f.write(json.dumps(entree_complete, ensure_ascii=False) + "\n")
+
+
+# ----------------------------------------------------------------------
+# NOUVEAU : fichier de preuve = contexte (lignes précédentes) + le
+# bloc complet de l'incident, comme ce qu'on voit en scrollant VSCode.
+# ----------------------------------------------------------------------
+def creer_fichier_incident(entree: dict, contexte: list[str]) -> Path:
+    CHEMIN_INCIDENTS.mkdir(parents=True, exist_ok=True)
+
+    nom = datetime.now(FUSEAU_LOCAL).strftime("incident_%Y-%m-%d_%H-%M-%S.log")
+    chemin = CHEMIN_INCIDENTS / nom
+
+    with open(chemin, "w", encoding="utf-8") as f:
+        f.write("=" * 70 + "\n")
+        f.write("INCIDENT DETECTE\n")
+        f.write("=" * 70 + "\n\n")
+
+        f.write(f"Date : {formater_timestamp(entree['timestamp'])}\n")
+        f.write(f"Niveau : {entree['niveau']}\n")
+        f.write(f"Logger : {entree['logger']}\n")
+        f.write(f"Ligne : {entree['numero_ligne']}\n\n")
+
+        f.write("-" * 70 + "\n")
+        f.write(f"CONTEXTE — {len(contexte)} dernières lignes avant/pendant l'incident\n")
+        f.write("-" * 70 + "\n\n")
+        f.write("".join(contexte) + "\n")
+
+        f.write("-" * 70 + "\n")
+        f.write("MESSAGE PRINCIPAL\n")
+        f.write("-" * 70 + "\n\n")
+        f.write(entree["message"] + "\n\n")
+
+        if entree["details"].strip():
+            f.write("-" * 70 + "\n")
+            f.write("STACKTRACE / DÉTAILS COMPLETS\n")
+            f.write("-" * 70 + "\n\n")
+            f.write(entree["details"])
+
+    return chemin
+
+
+def envoyer_email(sections: dict, fichier_incident: Path):
+    message = EmailMessage()
+    message["Subject"] = f"[AIOps] Incident détecté — {sections.get('GRAVITE', 'gravité inconnue')}"
+    message["From"] = EMAIL_EXPEDITEUR
+    message["To"] = EMAIL_DESTINATAIRE
+
+    corps = f"""Un incident vient d'être détecté.
+
+Description :
+{sections.get('DESCRIPTION', '(non disponible)')}
+
+Cause :
+{sections.get('CAUSE', '(non disponible)')}
+
+Gravité :
+{sections.get('GRAVITE', '(non disponible)')}
+
+Action :
+{sections.get('ACTION', '(non disponible)')}
+
+Le contexte complet du log (preuve brute) est joint à cet email.
+"""
+    message.set_content(corps)
+
+    with open(fichier_incident, "rb") as f:
+        message.add_attachment(
+            f.read(), maintype="text", subtype="plain", filename=fichier_incident.name
+        )
+
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        smtp.login(EMAIL_EXPEDITEUR, EMAIL_MOT_DE_PASSE)
+        smtp.send_message(message)
 
 
 def analyser_crash_demarrage():
@@ -302,28 +368,43 @@ def surveiller_en_temps_reel(position_depart: int, numero_ligne_initial: int):
     while not CHEMIN_LOG.exists():
         time.sleep(0.5)
 
+    # Tampon glissant des dernières lignes BRUTES lues (contexte)
+    contexte = deque(maxlen=LIGNES_DE_CONTEXTE)
+
     with open(CHEMIN_LOG, encoding="utf-8") as f:
         f.seek(position_depart)
         numero_ligne = numero_ligne_initial
         entree_courante = None
 
+        # CORRECTIF DEBOUNCE : on ne finalise une entrée qu'après
+        # plusieurs cycles CONSÉCUTIFS sans nouvelle ligne (silence
+        # confirmé), pas dès le premier cycle vide — ce qui évite de
+        # couper un bloc multi-lignes en cours d'écriture par Java.
+        cycles_vides_consecutifs = 0
+        SEUIL_SILENCE = 3  # ~1.5s de silence confirmé (3 x 0.5s)
+
         while True:
             ligne = f.readline()
 
             if not ligne:
-                if entree_courante:
-                    traiter_entree(entree_courante)
+                cycles_vides_consecutifs += 1
+                if entree_courante and cycles_vides_consecutifs >= SEUIL_SILENCE:
+                    traiter_entree(entree_courante, list(contexte))
                     entree_courante = None
-                time.sleep(1)
+                    cycles_vides_consecutifs = 0
+                time.sleep(0.5)
                 continue
 
+            cycles_vides_consecutifs = 0
             numero_ligne += 1
-            ligne = ligne.rstrip("\n")
-            correspondance = MOTIF_LIGNE.match(ligne)
+            contexte.append(ligne if ligne.endswith("\n") else ligne + "\n")
+
+            ligne_nettoyee = ligne.rstrip("\n")
+            correspondance = MOTIF_LIGNE.match(ligne_nettoyee)
 
             if correspondance:
                 if entree_courante:
-                    traiter_entree(entree_courante)
+                    traiter_entree(entree_courante, list(contexte))
                 entree_courante = {
                     "timestamp": correspondance.group("timestamp"),
                     "niveau": correspondance.group("niveau"),
@@ -333,10 +414,10 @@ def surveiller_en_temps_reel(position_depart: int, numero_ligne_initial: int):
                     "numero_ligne": numero_ligne,
                 }
             elif entree_courante:
-                entree_courante["details"] += ligne + "\n"
+                entree_courante["details"] += ligne_nettoyee + "\n"
 
 
-def traiter_entree(entree: dict):
+def traiter_entree(entree: dict, contexte: list[str]):
     niveau = entree["niveau"]
     if niveau not in NIVEAUX_A_ANALYSER:
         return
@@ -354,15 +435,17 @@ def traiter_entree(entree: dict):
 
     print(f"---- Analyse Ollama (durée : {duree:.1f}s) ----")
     afficher_analyse(sections)
+
+    chemin_incident = creer_fichier_incident(entree, contexte)
+    print(f"Preuve sauvegardée : {chemin_incident}")
+
+    try:
+        envoyer_email(sections, chemin_incident)
+        print("Email envoyé.")
+    except Exception as e:
+        print(f"Échec de l'envoi d'email : {e}")
+
     print("-------------------------\n")
-
-    preuve = creer_fichier_incident(entree)
-    #ty
-    envoyer_email(sections,preuve)
-    
-    
-                                                                        
-
 
     enregistrer_rapport({
         "timestamp_evenement": entree["timestamp"],
@@ -373,110 +456,8 @@ def traiter_entree(entree: dict):
         "logger": entree["logger"],
         "message": entree["message"],
         "analyse": sections,
-        "preuve": str(preuve),
+        "preuve": str(chemin_incident),
     })
-
-#ty
-
-def creer_fichier_incident(entree: dict) -> Path:
-    """
-    Crée un extrait complet du log autour d'un incident.
-    Retourne le chemin du fichier créé.
-    """
-
-    CHEMIN_INCIDENTS.mkdir(parents=True, exist_ok=True)
-
-    nom = datetime.now(FUSEAU_LOCAL).strftime(
-        "incident_%Y-%m-%d_%H-%M-%S.log"
-    )
-
-    chemin = CHEMIN_INCIDENTS / nom
-
-    with open(chemin, "w", encoding="utf-8") as f:
-
-        f.write("=" * 70 + "\n")
-        f.write("INCIDENT DETECTE\n")
-        f.write("=" * 70 + "\n\n")
-
-        f.write(f"Date : {formater_timestamp(entree['timestamp'])}\n")
-        f.write(f"Niveau : {entree['niveau']}\n")
-        f.write(f"Logger : {entree['logger']}\n")
-        f.write(f"Ligne : {entree['numero_ligne']}\n\n")
-
-        f.write("-" * 70 + "\n")
-        f.write("MESSAGE PRINCIPAL\n")
-        f.write("-" * 70 + "\n\n")
-
-        f.write(entree["message"] + "\n\n")
-
-        if entree["details"].strip():
-
-            f.write("-" * 70 + "\n")
-            f.write("STACKTRACE COMPLETE\n")
-            f.write("-" * 70 + "\n\n")
-
-            f.write(entree["details"])
-
-    return chemin
-
-def envoyer_email(
-                analyse,
-                fichier_incident
-        ):
-
-            expediteur = "noblette.tsimihanta@gmail.com"
-
-            mot_de_passe = "knex wyzt tlor zmwk"
-
-            destinataire = "noblette.tsimihanta@gmail.com"
-
-            message = EmailMessage()
-
-            message["Subject"] = "[AIOps] Incident détecté"
-
-            message["From"] = expediteur
-
-            message["To"] = destinataire
-
-            corps = f"""
-        Un incident vient d'être détecté.
-
-        Description :
-
-        {analyse['DESCRIPTION']}
-
-        Cause :
-
-        {analyse['CAUSE']}
-
-        Gravité :
-
-        {analyse['GRAVITE']}
-
-        Action :
-
-        {analyse['ACTION']}
-        """
-
-            message.set_content(corps)
-
-            with open(fichier_incident, "rb") as f:
-
-                message.add_attachment(
-                    f.read(),
-                    maintype="text",
-                    subtype="plain",
-                    filename=fichier_incident.name
-                )
-
-            with smtplib.SMTP_SSL("smtp.gmail.com",465) as smtp:
-
-                smtp.login(expediteur,mot_de_passe)
-
-                smtp.send_message(message)
-
-#ty
-
 
 
 if __name__ == "__main__":
