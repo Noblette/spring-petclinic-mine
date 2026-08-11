@@ -2,18 +2,21 @@
 run_and_analyze.py
 
 CORRECTIONS de cette version :
-  1. BUG DE TRONCATURE CORRIGÉ : le script finalisait une entrée dès
-     le premier cycle sans nouvelle donnée détectée, ce qui pouvait
-     couper un bloc multi-lignes en plein milieu si Java l'écrivait
-     en plusieurs petites écritures avec de micro-pauses entre elles
-     (observé concrètement : "Web server failed to " coupé avant
-     "start"). Corrigé avec un "debounce" : on attend plusieurs
-     cycles consécutifs sans nouvelle ligne avant de considérer
-     qu'une entrée est vraiment terminée.
-  2. CONTEXTE AJOUTÉ : un tampon glissant garde les 20 dernières
-     lignes brutes du log (tous niveaux confondus), pour que le
-     fichier de preuve/l'email montrent aussi ce qui précédait
-     l'erreur (comme dans VSCode), pas seulement le bloc isolé.
+  1. RECONNAISSANCE DES TITRES PLUS TOLÉRANTE : le modèle écrit parfois
+     ":FONCTIONNEMENT:" (deux-points avant ET après) au lieu de
+     "FONCTIONNEMENT:" comme demandé. L'ancienne expression régulière
+     ne reconnaissait que le second format — tout le texte mal formé
+     restait alors collé dans la section précédente (DESCRIPTION),
+     laissant les sections suivantes vides. Corrigé : le deux-points
+     de tête est maintenant toléré.
+  2. CONTEXTE SANS REDONDANCE : le tampon de "contexte" (lignes
+     précédentes) capturait aussi les lignes de l'incident lui-même,
+     qui étaient donc affichées deux fois (une fois dans CONTEXTE, une
+     fois dans les détails). Le contexte s'arrête maintenant juste
+     avant le début de l'incident.
+  3. FORMAT DE PREUVE PLUS SOBRE : les longues barres "====" / "----"
+     sur 70 caractères ont été remplacées par un format plus proche
+     d'un rapport écrit par un humain.
 """
 
 import re
@@ -40,7 +43,7 @@ FUSEAU_LOCAL = ZoneInfo("Indian/Antananarivo")
 URL_OLLAMA = "http://localhost:11434/api/generate"
 TIMEOUT_OLLAMA = 300
 NIVEAUX_A_ANALYSER = {"WARN", "ERROR", "FATAL"}
-LIGNES_DE_CONTEXTE = 20  # nombre de lignes brutes gardées avant l'incident
+LIGNES_DE_CONTEXTE = 20
 
 MOTIF_LIGNE = re.compile(
     r"^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})"
@@ -61,9 +64,6 @@ TITRES_AFFICHAGE = {
     "ACTION": "Action recommandée",
 }
 
-# Configuration email (à adapter / idéalement à sortir dans des
-# variables d'environnement plutôt que codées en dur, voir remarque
-# de sécurité en fin de fichier)
 EMAIL_EXPEDITEUR = "noblette.tsimihanta@gmail.com"
 EMAIL_MOT_DE_PASSE = "knex wyzt tlor zmwk"
 EMAIL_DESTINATAIRE = "noblette.tsimihanta@gmail.com"
@@ -144,8 +144,9 @@ IMPORTANT : le numéro de ligne fourni ci-dessous est une donnée déjà
 calculée et fiable — ce n'est PAS un élément à vérifier dans le texte.
 
 FORMAT DE RÉPONSE OBLIGATOIRE : réponds en français, en texte brut
-(pas de Markdown), en respectant EXACTEMENT cette structure — chaque
-titre ci-dessous seul sur sa ligne, suivi de ":", puis le contenu :
+(pas de Markdown). Chaque titre ci-dessous doit être écrit EXACTEMENT
+comme montré, seul sur sa ligne, SANS deux-points avant le mot,
+uniquement APRÈS (ex: "DESCRIPTION:" — jamais ":DESCRIPTION:") :
 
 DESCRIPTION:
 (résume en 1-2 phrases ce qui s'est passé)
@@ -181,8 +182,11 @@ def nettoyer_markdown(texte: str) -> str:
 
 
 def extraire_sections(texte: str) -> dict:
+    # CORRECTIF 1 : ":?" toléré avant le mot-titre, pour absorber les
+    # variantes du type ":FONCTIONNEMENT:" que le modèle produit
+    # parfois malgré la consigne.
     motif = re.compile(
-        r"(?:^|\n)\s*(" + "|".join(SECTIONS) + r")\s*:\s*\n?",
+        r"(?:^|\n)\s*:?\s*(" + "|".join(SECTIONS) + r")\s*:\s*\n?",
         re.IGNORECASE,
     )
     morceaux = motif.split(texte)
@@ -257,40 +261,34 @@ def enregistrer_rapport(entree: dict):
         f.write(json.dumps(entree_complete, ensure_ascii=False) + "\n")
 
 
+def souligner(titre: str) -> str:
+    return titre + "\n" + ("-" * len(titre))
+
+
 # ----------------------------------------------------------------------
-# NOUVEAU : fichier de preuve = contexte (lignes précédentes) + le
-# bloc complet de l'incident, comme ce qu'on voit en scrollant VSCode.
+# CORRECTIFS 2 & 3 : format plus sobre, contexte sans redondance
 # ----------------------------------------------------------------------
-def creer_fichier_incident(entree: dict, contexte: list[str]) -> Path:
+def creer_fichier_incident(entree: dict, contexte_avant: list[str]) -> Path:
     CHEMIN_INCIDENTS.mkdir(parents=True, exist_ok=True)
 
     nom = datetime.now(FUSEAU_LOCAL).strftime("incident_%Y-%m-%d_%H-%M-%S.log")
     chemin = CHEMIN_INCIDENTS / nom
 
     with open(chemin, "w", encoding="utf-8") as f:
-        f.write("=" * 70 + "\n")
-        f.write("INCIDENT DETECTE\n")
-        f.write("=" * 70 + "\n\n")
+        f.write(f"Incident du {formater_timestamp(entree['timestamp'])}\n\n")
+        f.write(f"Niveau    : {entree['niveau']}\n")
+        f.write(f"Logger    : {entree['logger']}\n")
+        f.write(f"Ligne log : {entree['numero_ligne']}\n\n")
 
-        f.write(f"Date : {formater_timestamp(entree['timestamp'])}\n")
-        f.write(f"Niveau : {entree['niveau']}\n")
-        f.write(f"Logger : {entree['logger']}\n")
-        f.write(f"Ligne : {entree['numero_ligne']}\n\n")
+        if contexte_avant:
+            f.write(souligner(f"Contexte ({len(contexte_avant)} lignes avant l'incident)") + "\n\n")
+            f.write("".join(contexte_avant) + "\n")
 
-        f.write("-" * 70 + "\n")
-        f.write(f"CONTEXTE — {len(contexte)} dernières lignes avant/pendant l'incident\n")
-        f.write("-" * 70 + "\n\n")
-        f.write("".join(contexte) + "\n")
-
-        f.write("-" * 70 + "\n")
-        f.write("MESSAGE PRINCIPAL\n")
-        f.write("-" * 70 + "\n\n")
-        f.write(entree["message"] + "\n\n")
+        f.write(souligner("Message") + "\n\n")
+        f.write((entree["message"] or "(aucun message sur cette ligne, voir détails ci-dessous)") + "\n\n")
 
         if entree["details"].strip():
-            f.write("-" * 70 + "\n")
-            f.write("STACKTRACE / DÉTAILS COMPLETS\n")
-            f.write("-" * 70 + "\n\n")
+            f.write(souligner("Détails / stack trace") + "\n\n")
             f.write(entree["details"])
 
     return chemin
@@ -298,7 +296,8 @@ def creer_fichier_incident(entree: dict, contexte: list[str]) -> Path:
 
 def envoyer_email(sections: dict, fichier_incident: Path):
     message = EmailMessage()
-    message["Subject"] = f"[AIOps] Incident détecté — {sections.get('GRAVITE', 'gravité inconnue')}"
+    # message["Subject"] = f"[AIOps] Incident détecté — {sections.get('GRAVITE', 'gravité inconnue')}"
+    message["Subject"] = f"[AIOps] Incident détecté — test"
     message["From"] = EMAIL_EXPEDITEUR
     message["To"] = EMAIL_DESTINATAIRE
 
@@ -306,6 +305,9 @@ def envoyer_email(sections: dict, fichier_incident: Path):
 
 Description :
 {sections.get('DESCRIPTION', '(non disponible)')}
+
+Fonctionnement de l'application :
+{sections.get('FONCTIONNEMENT', '(non disponible)')}
 
 Cause :
 {sections.get('CAUSE', '(non disponible)')}
@@ -368,7 +370,6 @@ def surveiller_en_temps_reel(position_depart: int, numero_ligne_initial: int):
     while not CHEMIN_LOG.exists():
         time.sleep(0.5)
 
-    # Tampon glissant des dernières lignes BRUTES lues (contexte)
     contexte = deque(maxlen=LIGNES_DE_CONTEXTE)
 
     with open(CHEMIN_LOG, encoding="utf-8") as f:
@@ -376,12 +377,8 @@ def surveiller_en_temps_reel(position_depart: int, numero_ligne_initial: int):
         numero_ligne = numero_ligne_initial
         entree_courante = None
 
-        # CORRECTIF DEBOUNCE : on ne finalise une entrée qu'après
-        # plusieurs cycles CONSÉCUTIFS sans nouvelle ligne (silence
-        # confirmé), pas dès le premier cycle vide — ce qui évite de
-        # couper un bloc multi-lignes en cours d'écriture par Java.
         cycles_vides_consecutifs = 0
-        SEUIL_SILENCE = 3  # ~1.5s de silence confirmé (3 x 0.5s)
+        SEUIL_SILENCE = 3
 
         while True:
             ligne = f.readline()
@@ -389,7 +386,7 @@ def surveiller_en_temps_reel(position_depart: int, numero_ligne_initial: int):
             if not ligne:
                 cycles_vides_consecutifs += 1
                 if entree_courante and cycles_vides_consecutifs >= SEUIL_SILENCE:
-                    traiter_entree(entree_courante, list(contexte))
+                    traiter_entree(entree_courante)
                     entree_courante = None
                     cycles_vides_consecutifs = 0
                 time.sleep(0.5)
@@ -397,14 +394,17 @@ def surveiller_en_temps_reel(position_depart: int, numero_ligne_initial: int):
 
             cycles_vides_consecutifs = 0
             numero_ligne += 1
-            contexte.append(ligne if ligne.endswith("\n") else ligne + "\n")
-
+            ligne_brute = ligne if ligne.endswith("\n") else ligne + "\n"
             ligne_nettoyee = ligne.rstrip("\n")
             correspondance = MOTIF_LIGNE.match(ligne_nettoyee)
 
             if correspondance:
                 if entree_courante:
-                    traiter_entree(entree_courante, list(contexte))
+                    traiter_entree(entree_courante)
+                # CORRECTIF 2 : le contexte est capturé AVANT d'ajouter
+                # la ligne courante — il ne contiendra donc jamais les
+                # lignes de l'incident lui-même (évite la redondance
+                # avec la section "Détails" plus bas).
                 entree_courante = {
                     "timestamp": correspondance.group("timestamp"),
                     "niveau": correspondance.group("niveau"),
@@ -412,12 +412,15 @@ def surveiller_en_temps_reel(position_depart: int, numero_ligne_initial: int):
                     "message": correspondance.group("message"),
                     "details": "",
                     "numero_ligne": numero_ligne,
+                    "contexte_avant": list(contexte),
                 }
             elif entree_courante:
                 entree_courante["details"] += ligne_nettoyee + "\n"
 
+            contexte.append(ligne_brute)
 
-def traiter_entree(entree: dict, contexte: list[str]):
+
+def traiter_entree(entree: dict):
     niveau = entree["niveau"]
     if niveau not in NIVEAUX_A_ANALYSER:
         return
@@ -436,7 +439,7 @@ def traiter_entree(entree: dict, contexte: list[str]):
     print(f"---- Analyse Ollama (durée : {duree:.1f}s) ----")
     afficher_analyse(sections)
 
-    chemin_incident = creer_fichier_incident(entree, contexte)
+    chemin_incident = creer_fichier_incident(entree, entree["contexte_avant"])
     print(f"Preuve sauvegardée : {chemin_incident}")
 
     try:
