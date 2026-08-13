@@ -2,21 +2,18 @@
 run_and_analyze.py
 
 CORRECTIONS de cette version :
-  1. RECONNAISSANCE DES TITRES PLUS TOLÉRANTE : le modèle écrit parfois
-     ":FONCTIONNEMENT:" (deux-points avant ET après) au lieu de
-     "FONCTIONNEMENT:" comme demandé. L'ancienne expression régulière
-     ne reconnaissait que le second format — tout le texte mal formé
-     restait alors collé dans la section précédente (DESCRIPTION),
-     laissant les sections suivantes vides. Corrigé : le deux-points
-     de tête est maintenant toléré.
-  2. CONTEXTE SANS REDONDANCE : le tampon de "contexte" (lignes
-     précédentes) capturait aussi les lignes de l'incident lui-même,
-     qui étaient donc affichées deux fois (une fois dans CONTEXTE, une
-     fois dans les détails). Le contexte s'arrête maintenant juste
-     avant le début de l'incident.
-  3. FORMAT DE PREUVE PLUS SOBRE : les longues barres "====" / "----"
-     sur 70 caractères ont été remplacées par un format plus proche
-     d'un rapport écrit par un humain.
+  1. SUJET EMAIL CORRIGÉ : on ré-utilise GRAVITE dans le sujet, mais
+     en extrayant SEULEMENT le mot (Critique/Eleve/Moyen/Faible), sans
+     la phrase de justification qui contient des retours à la ligne —
+     c'est ça qui cassait l'envoi ("Header values may not contain
+     linefeed..."), pas les identifiants (qui étaient déjà présents).
+  2. LIGNE BRUTE DE L'INCIDENT AJOUTÉE : la section "Message" affichait
+     seulement le texte après le tiret, jamais la ligne complète telle
+     qu'elle apparaît dans petclinic.log (horodatage, [main], niveau,
+     logger). Cette ligne brute exacte est maintenant capturée et
+     affichée — dans le fichier de preuve ET dans le corps de l'email
+     — sans redondance : elle REMPLACE l'ancien "Message" au lieu de
+     s'y ajouter, puisqu'elle contient déjà le message.
 """
 
 import re
@@ -54,6 +51,7 @@ MOTIF_LIGNE = re.compile(
 )
 
 SECTIONS = ["DESCRIPTION", "FONCTIONNEMENT", "CAUSE", "INDICES", "GRAVITE", "ACTION"]
+NIVEAUX_GRAVITE = ["Critique", "Eleve", "Élevé", "Moyen", "Faible"]
 
 TITRES_AFFICHAGE = {
     "DESCRIPTION": "Description",
@@ -182,9 +180,6 @@ def nettoyer_markdown(texte: str) -> str:
 
 
 def extraire_sections(texte: str) -> dict:
-    # CORRECTIF 1 : ":?" toléré avant le mot-titre, pour absorber les
-    # variantes du type ":FONCTIONNEMENT:" que le modèle produit
-    # parfois malgré la consigne.
     motif = re.compile(
         r"(?:^|\n)\s*:?\s*(" + "|".join(SECTIONS) + r")\s*:\s*\n?",
         re.IGNORECASE,
@@ -202,6 +197,13 @@ def extraire_sections(texte: str) -> dict:
         resultat["DESCRIPTION"] = texte.strip()
 
     return resultat
+
+
+def extraire_niveau_court(texte_gravite: str) -> str:
+    for niveau in NIVEAUX_GRAVITE:
+        if niveau.lower() in texte_gravite.lower():
+            return "Élevé" if niveau == "Eleve" else niveau
+    return "gravité non précisée"
 
 
 def analyser_avec_ollama(niveau: str, logger: str, message: str, details: str, numero_ligne) -> dict:
@@ -265,9 +267,6 @@ def souligner(titre: str) -> str:
     return titre + "\n" + ("-" * len(titre))
 
 
-# ----------------------------------------------------------------------
-# CORRECTIFS 2 & 3 : format plus sobre, contexte sans redondance
-# ----------------------------------------------------------------------
 def creer_fichier_incident(entree: dict, contexte_avant: list[str]) -> Path:
     CHEMIN_INCIDENTS.mkdir(parents=True, exist_ok=True)
 
@@ -277,15 +276,17 @@ def creer_fichier_incident(entree: dict, contexte_avant: list[str]) -> Path:
     with open(chemin, "w", encoding="utf-8") as f:
         f.write(f"Incident du {formater_timestamp(entree['timestamp'])}\n\n")
         f.write(f"Niveau    : {entree['niveau']}\n")
-        f.write(f"Logger    : {entree['logger']}\n")
+        #f.write(f"Logger    : {entree['logger']}\n")
         f.write(f"Ligne log : {entree['numero_ligne']}\n\n")
 
         if contexte_avant:
-            f.write(souligner(f"Contexte ({len(contexte_avant)} lignes avant l'incident)") + "\n\n")
+            #f.write(souligner(f"Contexte ({len(contexte_avant)} lignes avant l'incident)") + "\n\n")
             f.write("".join(contexte_avant) + "\n")
 
-        f.write(souligner("Message") + "\n\n")
-        f.write((entree["message"] or "(aucun message sur cette ligne, voir détails ci-dessous)") + "\n\n")
+        # NOUVEAU : la ligne brute exacte remplace l'ancien "Message"
+        # (elle contient déjà le message, donc pas de redondance).
+        #f.write(souligner("Ligne détectée (telle qu'elle apparaît dans petclinic.log)") + "\n\n") 
+        f.write(entree["ligne_brute"] + "\n\n")
 
         if entree["details"].strip():
             f.write(souligner("Détails / stack trace") + "\n\n")
@@ -294,14 +295,20 @@ def creer_fichier_incident(entree: dict, contexte_avant: list[str]) -> Path:
     return chemin
 
 
-def envoyer_email(sections: dict, fichier_incident: Path):
+def envoyer_email(sections: dict, entree: dict, fichier_incident: Path):
+    niveau_court = extraire_niveau_court(sections.get("GRAVITE", ""))
+
     message = EmailMessage()
-    # message["Subject"] = f"[AIOps] Incident détecté — {sections.get('GRAVITE', 'gravité inconnue')}"
-    message["Subject"] = f"[AIOps] Incident détecté — test"
+    #sujet = f"[AIOps] Incident détecté — {niveau_court}".replace("\n", " ").replace("\r", " ")
+    sujet = f"AIOps :  Incident détecté "
+    message["Subject"] = sujet
     message["From"] = EMAIL_EXPEDITEUR
     message["To"] = EMAIL_DESTINATAIRE
 
     corps = f"""Un incident vient d'être détecté.
+
+
+{entree['ligne_brute']}
 
 Description :
 {sections.get('DESCRIPTION', '(non disponible)')}
@@ -401,10 +408,6 @@ def surveiller_en_temps_reel(position_depart: int, numero_ligne_initial: int):
             if correspondance:
                 if entree_courante:
                     traiter_entree(entree_courante)
-                # CORRECTIF 2 : le contexte est capturé AVANT d'ajouter
-                # la ligne courante — il ne contiendra donc jamais les
-                # lignes de l'incident lui-même (évite la redondance
-                # avec la section "Détails" plus bas).
                 entree_courante = {
                     "timestamp": correspondance.group("timestamp"),
                     "niveau": correspondance.group("niveau"),
@@ -413,6 +416,9 @@ def surveiller_en_temps_reel(position_depart: int, numero_ligne_initial: int):
                     "details": "",
                     "numero_ligne": numero_ligne,
                     "contexte_avant": list(contexte),
+                    # NOUVEAU : on garde la ligne telle quelle, non
+                    # découpée, pour l'afficher fidèlement plus tard.
+                    "ligne_brute": ligne_nettoyee,
                 }
             elif entree_courante:
                 entree_courante["details"] += ligne_nettoyee + "\n"
@@ -443,7 +449,7 @@ def traiter_entree(entree: dict):
     print(f"Preuve sauvegardée : {chemin_incident}")
 
     try:
-        envoyer_email(sections, chemin_incident)
+        envoyer_email(sections, entree, chemin_incident)
         print("Email envoyé.")
     except Exception as e:
         print(f"Échec de l'envoi d'email : {e}")
@@ -458,6 +464,7 @@ def traiter_entree(entree: dict):
         "niveau": niveau,
         "logger": entree["logger"],
         "message": entree["message"],
+        "ligne_brute": entree["ligne_brute"],
         "analyse": sections,
         "preuve": str(chemin_incident),
     })

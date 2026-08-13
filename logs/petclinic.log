@@ -1,45 +1,265 @@
-2026-08-10 15:02:36.416 [main] INFO  org.springframework.samples.petclinic.PetClinicApplication - Starting PetClinicApplication v4.0.0-SNAPSHOT using Java 21.0.11 with PID 52493 (/home/noblette/Documents/java-projects/spring-petclinic/target/spring-petclinic-4.0.0-SNAPSHOT.jar started by noblette in /home/noblette/Documents/java-projects/spring-petclinic)
-2026-08-10 15:02:36.432 [main] DEBUG org.springframework.samples.petclinic.PetClinicApplication - Running with Spring Boot v4.1.0, Spring v7.0.8
-2026-08-10 15:02:36.434 [main] INFO  org.springframework.samples.petclinic.PetClinicApplication - No active profile set, falling back to 1 default profile: "default"
-2026-08-10 15:02:37.282 [background-preinit] INFO  org.hibernate.validator.internal.util.Version - HV000001: Hibernate Validator 9.1.0.Final
-2026-08-10 15:02:39.390 [main] INFO  org.springframework.data.repository.config.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
-2026-08-10 15:02:39.546 [main] INFO  org.springframework.data.repository.config.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 127 ms. Found 3 JPA repository interfaces.
-2026-08-10 15:02:41.922 [main] INFO  org.springframework.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
-2026-08-10 15:02:42.063 [main] INFO  org.apache.coyote.http11.Http11NioProtocol - Initializing ProtocolHandler ["http-nio-8080"]
-2026-08-10 15:02:42.100 [main] INFO  org.apache.catalina.core.StandardService - Starting service [Tomcat]
-2026-08-10 15:02:42.102 [main] INFO  org.apache.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.22]
-2026-08-10 15:02:42.285 [main] INFO  org.springframework.boot.web.context.servlet.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 5729 ms
-2026-08-10 15:02:42.790 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
-2026-08-10 15:02:43.245 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:f6cfb9fa-c053-4b27-b23a-b11eece46832 user=SA
-2026-08-10 15:02:43.251 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
-2026-08-10 15:02:43.856 [main] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
-2026-08-10 15:02:43.999 [main] INFO  org.hibernate.orm.core - HHH000001: Hibernate ORM core version 7.4.1.Final
-2026-08-10 15:02:44.761 [main] INFO  org.springframework.orm.jpa.persistenceunit.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
-2026-08-10 15:02:44.909 [main] INFO  org.hibernate.orm.connections.pooling - HHH10001005: Database info:
-	Database JDBC URL [jdbc:h2:mem:f6cfb9fa-c053-4b27-b23a-b11eece46832]
+2026-08-11 22:22:02.988 [main] INFO  org.springframework.samples.petclinic.PetClinicApplication - Starting PetClinicApplication v4.0.0-SNAPSHOT using Java 21.0.11 with PID 8019 (/home/noblette/Documents/java-projects/spring-petclinic/target/spring-petclinic-4.0.0-SNAPSHOT.jar started by noblette in /home/noblette/Documents/java-projects/spring-petclinic)
+2026-08-11 22:22:03.002 [main] DEBUG org.springframework.samples.petclinic.PetClinicApplication - Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-08-11 22:22:03.004 [main] INFO  org.springframework.samples.petclinic.PetClinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-08-11 22:22:03.369 [background-preinit] INFO  org.hibernate.validator.internal.util.Version - HV000001: Hibernate Validator 9.1.0.Final
+2026-08-11 22:22:04.616 [main] INFO  org.springframework.data.repository.config.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-08-11 22:22:04.706 [main] INFO  org.springframework.data.repository.config.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 76 ms. Found 3 JPA repository interfaces.
+2026-08-11 22:22:05.783 [main] INFO  org.springframework.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-08-11 22:22:05.813 [main] INFO  org.apache.coyote.http11.Http11NioProtocol - Initializing ProtocolHandler ["http-nio-8080"]
+2026-08-11 22:22:05.815 [main] INFO  org.apache.catalina.core.StandardService - Starting service [Tomcat]
+2026-08-11 22:22:05.815 [main] INFO  org.apache.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.22]
+2026-08-11 22:22:05.855 [main] INFO  org.springframework.boot.web.context.servlet.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 2740 ms
+2026-08-11 22:22:06.188 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-08-11 22:22:06.396 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:e59b8669-f348-4076-938b-df244de97234 user=SA
+2026-08-11 22:22:06.398 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-08-11 22:22:06.611 [main] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-08-11 22:22:06.669 [main] INFO  org.hibernate.orm.core - HHH000001: Hibernate ORM core version 7.4.1.Final
+2026-08-11 22:22:07.112 [main] INFO  org.springframework.orm.jpa.persistenceunit.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-08-11 22:22:07.202 [main] INFO  org.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:h2:mem:e59b8669-f348-4076-938b-df244de97234]
 	Database driver: H2 JDBC Driver
 	Database dialect: H2Dialect
 	Database version: 2.4.240
-	Default catalog/schema: F6CFB9FA-C053-4B27-B23A-B11EECE46832/PUBLIC
+	Default catalog/schema: E59B8669-F348-4076-938B-DF244DE97234/PUBLIC
 	Autocommit mode: undefined/unknown
 	Isolation level: READ_COMMITTED [default READ_COMMITTED]
 	JDBC fetch size: 100
 	Pool: DataSourceConnectionProvider
 	Minimum pool size: undefined/unknown
 	Maximum pool size: undefined/unknown
-2026-08-10 15:02:46.547 [main] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
-2026-08-10 15:02:46.562 [main] INFO  org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
-2026-08-10 15:02:46.707 [main] INFO  org.springframework.data.jpa.repository.query.QueryEnhancerFactories - Hibernate is in classpath; If applicable, HQL parser will be used.
-2026-08-10 15:02:49.182 [main] INFO  org.springframework.boot.actuate.endpoint.web.EndpointLinksResolver - Exposing 13 endpoints beneath base path '/actuator'
-2026-08-10 15:02:49.340 [main] INFO  org.apache.coyote.http11.Http11NioProtocol - Starting ProtocolHandler ["http-nio-8080"]
-2026-08-10 15:02:49.389 [main] WARN  org.springframework.boot.web.server.servlet.context.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.context.ApplicationContextException: Failed to start bean 'webServerStartStop'
-2026-08-10 15:02:49.397 [main] INFO  org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
-2026-08-10 15:02:49.404 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
-2026-08-10 15:02:49.407 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
-2026-08-10 15:02:49.457 [main] INFO  org.springframework.boot.autoconfigure.logging.ConditionEvaluationReportLogger - 
+2026-08-11 22:22:08.660 [main] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-08-11 22:22:08.669 [main] INFO  org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-08-11 22:22:08.799 [main] INFO  org.springframework.data.jpa.repository.query.QueryEnhancerFactories - Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-08-11 22:22:10.796 [main] INFO  org.springframework.boot.actuate.endpoint.web.EndpointLinksResolver - Exposing 13 endpoints beneath base path '/actuator'
+2026-08-11 22:22:10.901 [main] INFO  org.apache.coyote.http11.Http11NioProtocol - Starting ProtocolHandler ["http-nio-8080"]
+2026-08-11 22:22:10.913 [main] WARN  org.springframework.boot.web.server.servlet.context.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.context.ApplicationContextException: Failed to start bean 'webServerStartStop'
+2026-08-11 22:22:10.919 [main] INFO  org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-08-11 22:22:10.924 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-08-11 22:22:10.927 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-08-11 22:22:10.948 [main] INFO  org.springframework.boot.autoconfigure.logging.ConditionEvaluationReportLogger - 
 
 Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
-2026-08-10 15:02:49.484 [main] ERROR org.springframework.boot.diagnostics.LoggingFailureAnalysisReporter - 
+2026-08-11 22:22:10.971 [main] ERROR org.springframework.boot.diagnostics.LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Web server failed to start. Port 8080 was already in use.
+
+Action:
+
+Identify and stop the process that's listening on port 8080 or configure this application to listen on another port.
+
+2026-08-12 08:39:24.321 [main] INFO  org.springframework.samples.petclinic.PetClinicApplication - Starting PetClinicApplication v4.0.0-SNAPSHOT using Java 21.0.11 with PID 8855 (/home/noblette/Documents/java-projects/spring-petclinic/target/spring-petclinic-4.0.0-SNAPSHOT.jar started by noblette in /home/noblette/Documents/java-projects/spring-petclinic)
+2026-08-12 08:39:24.334 [main] DEBUG org.springframework.samples.petclinic.PetClinicApplication - Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-08-12 08:39:24.336 [main] INFO  org.springframework.samples.petclinic.PetClinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-08-12 08:39:24.710 [background-preinit] INFO  org.hibernate.validator.internal.util.Version - HV000001: Hibernate Validator 9.1.0.Final
+2026-08-12 08:39:25.886 [main] INFO  org.springframework.data.repository.config.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-08-12 08:39:25.988 [main] INFO  org.springframework.data.repository.config.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 72 ms. Found 3 JPA repository interfaces.
+2026-08-12 08:39:27.117 [main] INFO  org.springframework.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-08-12 08:39:27.163 [main] INFO  org.apache.coyote.http11.Http11NioProtocol - Initializing ProtocolHandler ["http-nio-8080"]
+2026-08-12 08:39:27.166 [main] INFO  org.apache.catalina.core.StandardService - Starting service [Tomcat]
+2026-08-12 08:39:27.167 [main] INFO  org.apache.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.22]
+2026-08-12 08:39:27.204 [main] INFO  org.springframework.boot.web.context.servlet.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 2737 ms
+2026-08-12 08:39:27.486 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-08-12 08:39:27.698 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:a1314f79-24e5-445a-ab75-4c3a7cf7f306 user=SA
+2026-08-12 08:39:27.700 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-08-12 08:39:27.931 [main] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-08-12 08:39:28.018 [main] INFO  org.hibernate.orm.core - HHH000001: Hibernate ORM core version 7.4.1.Final
+2026-08-12 08:39:28.587 [main] INFO  org.springframework.orm.jpa.persistenceunit.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-08-12 08:39:28.695 [main] INFO  org.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:h2:mem:a1314f79-24e5-445a-ab75-4c3a7cf7f306]
+	Database driver: H2 JDBC Driver
+	Database dialect: H2Dialect
+	Database version: 2.4.240
+	Default catalog/schema: A1314F79-24E5-445A-AB75-4C3A7CF7F306/PUBLIC
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: 100
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-08-12 08:39:29.912 [main] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-08-12 08:39:29.921 [main] INFO  org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-08-12 08:39:30.032 [main] INFO  org.springframework.data.jpa.repository.query.QueryEnhancerFactories - Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-08-12 08:39:31.635 [main] INFO  org.springframework.boot.actuate.endpoint.web.EndpointLinksResolver - Exposing 13 endpoints beneath base path '/actuator'
+2026-08-12 08:39:31.742 [main] INFO  org.apache.coyote.http11.Http11NioProtocol - Starting ProtocolHandler ["http-nio-8080"]
+2026-08-12 08:39:31.945 [main] WARN  org.springframework.boot.web.server.servlet.context.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.context.ApplicationContextException: Failed to start bean 'webServerStartStop'
+2026-08-12 08:39:31.953 [main] INFO  org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-08-12 08:39:31.957 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-08-12 08:39:31.960 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-08-12 08:39:32.057 [main] INFO  org.springframework.boot.autoconfigure.logging.ConditionEvaluationReportLogger - 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-08-12 08:39:32.083 [main] ERROR org.springframework.boot.diagnostics.LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Web server failed to start. Port 8080 was already in use.
+
+Action:
+
+Identify and stop the process that's listening on port 8080 or configure this application to listen on another port.
+
+2026-08-12 09:10:15.432 [main] INFO  org.springframework.samples.petclinic.PetClinicApplication - Starting PetClinicApplication v4.0.0-SNAPSHOT using Java 21.0.11 with PID 11880 (/home/noblette/Documents/java-projects/spring-petclinic/target/spring-petclinic-4.0.0-SNAPSHOT.jar started by noblette in /home/noblette/Documents/java-projects/spring-petclinic)
+2026-08-12 09:10:15.443 [main] DEBUG org.springframework.samples.petclinic.PetClinicApplication - Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-08-12 09:10:15.445 [main] INFO  org.springframework.samples.petclinic.PetClinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-08-12 09:10:16.202 [background-preinit] INFO  org.hibernate.validator.internal.util.Version - HV000001: Hibernate Validator 9.1.0.Final
+2026-08-12 09:10:17.711 [main] INFO  org.springframework.data.repository.config.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-08-12 09:10:17.814 [main] INFO  org.springframework.data.repository.config.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 86 ms. Found 3 JPA repository interfaces.
+2026-08-12 09:10:19.512 [main] INFO  org.springframework.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-08-12 09:10:19.543 [main] INFO  org.apache.coyote.http11.Http11NioProtocol - Initializing ProtocolHandler ["http-nio-8080"]
+2026-08-12 09:10:19.546 [main] INFO  org.apache.catalina.core.StandardService - Starting service [Tomcat]
+2026-08-12 09:10:19.546 [main] INFO  org.apache.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.22]
+2026-08-12 09:10:19.633 [main] INFO  org.springframework.boot.web.context.servlet.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 4105 ms
+2026-08-12 09:10:20.164 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-08-12 09:10:20.525 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:55a4c1bf-1292-437a-9d19-f707b99745da user=SA
+2026-08-12 09:10:20.528 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-08-12 09:10:20.790 [main] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-08-12 09:10:20.874 [main] INFO  org.hibernate.orm.core - HHH000001: Hibernate ORM core version 7.4.1.Final
+2026-08-12 09:10:21.503 [main] INFO  org.springframework.orm.jpa.persistenceunit.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-08-12 09:10:21.642 [main] INFO  org.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:h2:mem:55a4c1bf-1292-437a-9d19-f707b99745da]
+	Database driver: H2 JDBC Driver
+	Database dialect: H2Dialect
+	Database version: 2.4.240
+	Default catalog/schema: 55A4C1BF-1292-437A-9D19-F707B99745DA/PUBLIC
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: 100
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-08-12 09:10:22.979 [main] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-08-12 09:10:22.989 [main] INFO  org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-08-12 09:10:23.136 [main] INFO  org.springframework.data.jpa.repository.query.QueryEnhancerFactories - Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-08-12 09:10:25.366 [main] INFO  org.springframework.boot.actuate.endpoint.web.EndpointLinksResolver - Exposing 13 endpoints beneath base path '/actuator'
+2026-08-12 09:10:25.490 [main] INFO  org.apache.coyote.http11.Http11NioProtocol - Starting ProtocolHandler ["http-nio-8080"]
+2026-08-12 09:10:25.536 [main] WARN  org.springframework.boot.web.server.servlet.context.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.context.ApplicationContextException: Failed to start bean 'webServerStartStop'
+2026-08-12 09:10:25.544 [main] INFO  org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-08-12 09:10:25.549 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-08-12 09:10:25.554 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-08-12 09:10:25.583 [main] INFO  org.springframework.boot.autoconfigure.logging.ConditionEvaluationReportLogger - 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-08-12 09:10:25.612 [main] ERROR org.springframework.boot.diagnostics.LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Web server failed to start. Port 8080 was already in use.
+
+Action:
+
+Identify and stop the process that's listening on port 8080 or configure this application to listen on another port.
+
+2026-08-12 09:18:28.853 [main] INFO  org.springframework.samples.petclinic.PetClinicApplication - Starting PetClinicApplication v4.0.0-SNAPSHOT using Java 21.0.11 with PID 12914 (/home/noblette/Documents/java-projects/spring-petclinic/target/spring-petclinic-4.0.0-SNAPSHOT.jar started by noblette in /home/noblette/Documents/java-projects/spring-petclinic)
+2026-08-12 09:18:28.870 [main] DEBUG org.springframework.samples.petclinic.PetClinicApplication - Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-08-12 09:18:28.871 [main] INFO  org.springframework.samples.petclinic.PetClinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-08-12 09:18:29.194 [background-preinit] INFO  org.hibernate.validator.internal.util.Version - HV000001: Hibernate Validator 9.1.0.Final
+2026-08-12 09:18:30.562 [main] INFO  org.springframework.data.repository.config.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-08-12 09:18:30.671 [main] INFO  org.springframework.data.repository.config.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 89 ms. Found 3 JPA repository interfaces.
+2026-08-12 09:18:32.564 [main] INFO  org.springframework.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-08-12 09:18:32.673 [main] INFO  org.apache.coyote.http11.Http11NioProtocol - Initializing ProtocolHandler ["http-nio-8080"]
+2026-08-12 09:18:32.680 [main] INFO  org.apache.catalina.core.StandardService - Starting service [Tomcat]
+2026-08-12 09:18:32.681 [main] INFO  org.apache.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.22]
+2026-08-12 09:18:32.732 [main] INFO  org.springframework.boot.web.context.servlet.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 3772 ms
+2026-08-12 09:18:32.995 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-08-12 09:18:33.193 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:bd00e3a7-851b-40c6-9330-a5510349c3db user=SA
+2026-08-12 09:18:33.195 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-08-12 09:18:33.413 [main] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-08-12 09:18:33.485 [main] INFO  org.hibernate.orm.core - HHH000001: Hibernate ORM core version 7.4.1.Final
+2026-08-12 09:18:34.074 [main] INFO  org.springframework.orm.jpa.persistenceunit.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-08-12 09:18:34.180 [main] INFO  org.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:h2:mem:bd00e3a7-851b-40c6-9330-a5510349c3db]
+	Database driver: H2 JDBC Driver
+	Database dialect: H2Dialect
+	Database version: 2.4.240
+	Default catalog/schema: BD00E3A7-851B-40C6-9330-A5510349C3DB/PUBLIC
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: 100
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-08-12 09:18:35.327 [main] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-08-12 09:18:35.337 [main] INFO  org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-08-12 09:18:35.469 [main] INFO  org.springframework.data.jpa.repository.query.QueryEnhancerFactories - Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-08-12 09:18:37.358 [main] INFO  org.springframework.boot.actuate.endpoint.web.EndpointLinksResolver - Exposing 13 endpoints beneath base path '/actuator'
+2026-08-12 09:18:37.489 [main] INFO  org.apache.coyote.http11.Http11NioProtocol - Starting ProtocolHandler ["http-nio-8080"]
+2026-08-12 09:18:37.525 [main] WARN  org.springframework.boot.web.server.servlet.context.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.context.ApplicationContextException: Failed to start bean 'webServerStartStop'
+2026-08-12 09:18:37.532 [main] INFO  org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-08-12 09:18:37.536 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-08-12 09:18:37.540 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-08-12 09:18:37.562 [main] INFO  org.springframework.boot.autoconfigure.logging.ConditionEvaluationReportLogger - 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-08-12 09:18:37.585 [main] ERROR org.springframework.boot.diagnostics.LoggingFailureAnalysisReporter - 
+
+***************************
+APPLICATION FAILED TO START
+***************************
+
+Description:
+
+Web server failed to start. Port 8080 was already in use.
+
+Action:
+
+Identify and stop the process that's listening on port 8080 or configure this application to listen on another port.
+
+2026-08-12 09:25:11.652 [main] INFO  org.springframework.samples.petclinic.PetClinicApplication - Starting PetClinicApplication v4.0.0-SNAPSHOT using Java 21.0.11 with PID 13767 (/home/noblette/Documents/java-projects/spring-petclinic/target/spring-petclinic-4.0.0-SNAPSHOT.jar started by noblette in /home/noblette/Documents/java-projects/spring-petclinic)
+2026-08-12 09:25:11.676 [main] DEBUG org.springframework.samples.petclinic.PetClinicApplication - Running with Spring Boot v4.1.0, Spring v7.0.8
+2026-08-12 09:25:11.677 [main] INFO  org.springframework.samples.petclinic.PetClinicApplication - No active profile set, falling back to 1 default profile: "default"
+2026-08-12 09:25:12.198 [background-preinit] INFO  org.hibernate.validator.internal.util.Version - HV000001: Hibernate Validator 9.1.0.Final
+2026-08-12 09:25:13.049 [main] INFO  org.springframework.data.repository.config.RepositoryConfigurationDelegate - Bootstrapping Spring Data JPA repositories in DEFAULT mode.
+2026-08-12 09:25:13.127 [main] INFO  org.springframework.data.repository.config.RepositoryConfigurationDelegate - Finished Spring Data repository scanning in 65 ms. Found 3 JPA repository interfaces.
+2026-08-12 09:25:14.140 [main] INFO  org.springframework.boot.tomcat.TomcatWebServer - Tomcat initialized with port 8080 (http)
+2026-08-12 09:25:14.171 [main] INFO  org.apache.coyote.http11.Http11NioProtocol - Initializing ProtocolHandler ["http-nio-8080"]
+2026-08-12 09:25:14.173 [main] INFO  org.apache.catalina.core.StandardService - Starting service [Tomcat]
+2026-08-12 09:25:14.174 [main] INFO  org.apache.catalina.core.StandardEngine - Starting Servlet engine: [Apache Tomcat/11.0.22]
+2026-08-12 09:25:14.215 [main] INFO  org.springframework.boot.web.context.servlet.WebApplicationContextInitializer - Root WebApplicationContext: initialization completed in 2468 ms
+2026-08-12 09:25:14.456 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Starting...
+2026-08-12 09:25:14.682 [main] INFO  com.zaxxer.hikari.pool.HikariPool - HikariPool-1 - Added connection conn0: url=jdbc:h2:mem:b4d83d88-546d-4d1b-ba0a-a770b7eba4bc user=SA
+2026-08-12 09:25:14.684 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Start completed.
+2026-08-12 09:25:14.846 [main] INFO  org.hibernate.orm.jpa - HHH008540: Processing PersistenceUnitInfo [name: default]
+2026-08-12 09:25:14.903 [main] INFO  org.hibernate.orm.core - HHH000001: Hibernate ORM core version 7.4.1.Final
+2026-08-12 09:25:15.316 [main] INFO  org.springframework.orm.jpa.persistenceunit.SpringPersistenceUnitInfo - No LoadTimeWeaver setup: ignoring JPA class transformer
+2026-08-12 09:25:15.403 [main] INFO  org.hibernate.orm.connections.pooling - HHH10001005: Database info:
+	Database JDBC URL [jdbc:h2:mem:b4d83d88-546d-4d1b-ba0a-a770b7eba4bc]
+	Database driver: H2 JDBC Driver
+	Database dialect: H2Dialect
+	Database version: 2.4.240
+	Default catalog/schema: B4D83D88-546D-4D1B-BA0A-A770B7EBA4BC/PUBLIC
+	Autocommit mode: undefined/unknown
+	Isolation level: READ_COMMITTED [default READ_COMMITTED]
+	JDBC fetch size: 100
+	Pool: DataSourceConnectionProvider
+	Minimum pool size: undefined/unknown
+	Maximum pool size: undefined/unknown
+2026-08-12 09:25:16.786 [main] INFO  org.hibernate.orm.core - HHH000489: No JTA platform available (set 'hibernate.transaction.jta.platform' to enable JTA platform integration)
+2026-08-12 09:25:16.796 [main] INFO  org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean - Initialized JPA EntityManagerFactory for persistence unit 'default'
+2026-08-12 09:25:16.940 [main] INFO  org.springframework.data.jpa.repository.query.QueryEnhancerFactories - Hibernate is in classpath; If applicable, HQL parser will be used.
+2026-08-12 09:25:18.875 [main] INFO  org.springframework.boot.actuate.endpoint.web.EndpointLinksResolver - Exposing 13 endpoints beneath base path '/actuator'
+2026-08-12 09:25:19.006 [main] INFO  org.apache.coyote.http11.Http11NioProtocol - Starting ProtocolHandler ["http-nio-8080"]
+2026-08-12 09:25:19.184 [main] WARN  org.springframework.boot.web.server.servlet.context.AnnotationConfigServletWebServerApplicationContext - Exception encountered during context initialization - cancelling refresh attempt: org.springframework.context.ApplicationContextException: Failed to start bean 'webServerStartStop'
+2026-08-12 09:25:19.192 [main] INFO  org.springframework.orm.jpa.LocalContainerEntityManagerFactoryBean - Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-08-12 09:25:19.197 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown initiated...
+2026-08-12 09:25:19.201 [main] INFO  com.zaxxer.hikari.HikariDataSource - HikariPool-1 - Shutdown completed.
+2026-08-12 09:25:19.246 [main] INFO  org.springframework.boot.autoconfigure.logging.ConditionEvaluationReportLogger - 
+
+Error starting ApplicationContext. To display the condition evaluation report re-run your application with 'debug' enabled.
+2026-08-12 09:25:19.271 [main] ERROR org.springframework.boot.diagnostics.LoggingFailureAnalysisReporter - 
 
 ***************************
 APPLICATION FAILED TO START
